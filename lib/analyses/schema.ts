@@ -1,8 +1,11 @@
 import { z } from "zod";
 import type { ItemSuggestion } from "@/lib/api/types";
+import { itemColors, SEASONS } from "@/lib/items/schema";
+import { MAX_TAG_LENGTH, tagName } from "@/lib/tags/schema";
+
+export { SEASONS };
 
 export const ANALYSIS_KINDS = ["colors", "vision"] as const;
-export const SEASONS = ["spring", "summer", "autumn", "winter"] as const;
 
 /** Keys of ItemSuggestion, in the order the UI lists them. */
 export const SUGGESTION_FIELDS = [
@@ -25,21 +28,12 @@ export const LIMITS = {
 	size: 50,
 	pattern: 50,
 	material: 100,
-	tag: 64,
+	tag: MAX_TAG_LENGTH,
 	tags: 12,
 	labelText: 2000,
 } as const;
 
 const text = (max: number) => z.string().trim().min(1).max(max);
-
-export const itemColorSchema = z.object({
-	name: text(50),
-	hex: z.string().regex(/^#[0-9a-f]{6}$/i),
-	share: z.number().min(0).max(1),
-});
-
-/** Tags are stored lower-case and unique. */
-export const tagName = z.string().trim().toLowerCase().min(1).max(LIMITS.tag);
 
 /** A stored analysis result (Analysis.result when status is done). */
 export const itemSuggestionSchema = z.object({
@@ -47,7 +41,7 @@ export const itemSuggestionSchema = z.object({
 	categorySlug: text(100).optional(),
 	brand: text(LIMITS.brand).optional(),
 	size: text(LIMITS.size).optional(),
-	colors: z.array(itemColorSchema).optional(),
+	colors: itemColors.optional(),
 	pattern: text(LIMITS.pattern).optional(),
 	material: text(LIMITS.material).optional(),
 	seasons: z.array(z.enum(SEASONS)).optional(),
