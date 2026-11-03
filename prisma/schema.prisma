@@ -266,3 +266,30 @@ model Analysis {
   @@index([photoId])
   @@map("analyses")
 }
+
+/// Idempotency-Key bookkeeping for POSTs (lib/http/idempotency). A row is
+/// inserted (pending: `status` null) before the handler runs, so the unique
+/// (sub, key) serialises concurrent duplicates; the response is stored once
+/// the handler returns (2xx/4xx; a 5xx deletes the row so it can be retried).
+/// Rows older than 7 days are deleted on write.
+model IdempotencyKey {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  /// oauth2-proxy `X-Forwarded-User`: keys are scoped per user.
+  sub          String    @db.VarChar(255)
+  key          String    @db.VarChar(200)
+  /// "POST /api/items".
+  route        String    @db.VarChar(200)
+  /// SHA-256 (hex) of the raw request body.
+  requestHash  String    @map("request_hash") @db.Char(64)
+  /// Null while the first request is in flight.
+  status       Int?
+  responseBody Json?     @map("response_body")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  /// When the in-flight request took the key; a stale lock can be taken over.
+  lockedAt     DateTime  @default(now()) @map("locked_at") @db.Timestamptz
+  completedAt  DateTime? @map("completed_at") @db.Timestamptz
+
+  @@unique([sub, key])
+  @@index([createdAt])
+  @@map("idempotency_keys")
+}

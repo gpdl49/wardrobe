@@ -90,6 +90,30 @@ export async function createPhotoUpload(
 }
 
 /**
+ * An Idempotency-Key replay of POST /api/photos: the stored presigned URL may
+ * have expired (the queue re-POSTs with the same key exactly when its PUT got
+ * a 400/403), so a photo still pending gets a fresh one. Anything else is
+ * replayed as stored.
+ */
+export async function refreshPhotoUpload(
+	stored: PhotoUploadDto,
+): Promise<PhotoUploadDto> {
+	const photo = await db().photo.findUnique({ where: { id: stored.photo.id } });
+	if (photo?.status !== "pending") {
+		return stored;
+	}
+	const put = await presignPut(
+		photoKey(photo.id, "original"),
+		photo.contentType,
+	);
+	return {
+		photo: toPhotoDto(photo),
+		uploadUrl: put.url,
+		uploadHeaders: put.headers,
+	};
+}
+
+/**
  * Checks the original arrived and queues the renditions. Idempotent: a photo
  * already processing or ready is returned as is; a failed one is retried.
  */

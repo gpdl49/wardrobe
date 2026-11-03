@@ -409,6 +409,104 @@ describe("UploadQueue", () => {
 		expect(backend.find("POST", "/api/photos/photo-2/complete")).toHaveLength(
 			1,
 		);
+		// Same key: the server replays the same photo with a fresh URL.
+		expect(
+			backend
+				.find("POST", "/api/photos")
+				.map((c) => c.headers.get("idempotency-key")),
+		).toEqual([`photo-${job.id}`, `photo-${job.id}`]);
+	});
+
+	it("retries createItem with the same key and body, PATCHing edits made meanwhile", async () => {
+		let lost = true;
+		backend.use((c) => {
+			if (c.url === "/api/items" && lost) {
+				// The server created the item but the response never arrived.
+				lost = false;
+				throw new TypeError("Failed to fetch");
+			}
+			return undefined;
+		});
+		const { queue } = makeQueue();
+		await queue.start();
+		const job = await queue.enqueueCapture({
+			blob: photo(),
+			locationId: LOCATION,
+			sessionId: "s-1",
+			fields: { name: "Coat" },
+		});
+		await queue.whenIdle();
+		expect(queue.get(job.id)?.status).toBe("retrying");
+		await queue.updateFields(job.id, { name: "Wool coat" });
+		await vi.advanceTimersByTimeAsync(1000);
+		await queue.whenIdle();
+
+		const creates = backend.find("POST", "/api/items");
+		expect(creates.map((c) => c.body)).toEqual([
+			{ locationId: LOCATION, sessionId: "s-1", name: "Coat" },
+			{ locationId: LOCATION, sessionId: "s-1", name: "Coat" },
+		]);
+		expect(creates.map((c) => c.headers.get("idempotency-key"))).toEqual([
+			`item-${job.id}`,
+			`item-${job.id}`,
+		]);
+		expect(
+			backend.find("PATCH", "/api/items/item-1").map((c) => c.body),
+		).toEqual([{ name: "Wool coat", categoryId: null }]);
+		expect(queue.get(job.id)).toMatchObject({
+			status: "done",
+			syncedFieldsVersion: 1,
+		});
+	});
+
+	it("keeps the frozen createItem body across a reload", async () => {
+		const { queue, storeName } = makeQueue();
+		backend.use((c) =>
+			c.url === "/api/items"
+				? json({ error: "internal", message: "boom" }, 503)
+				: undefined,
+		);
+		await queue.start();
+		const job = await queue.enqueueCapture({
+			blob: photo(),
+			locationId: LOCATION,
+			sessionId: null,
+			fields: { name: "Hat" },
+		});
+		await queue.whenIdle();
+		await queue.updateFields(job.id, { name: "Cap" });
+		queue.dispose();
+
+		const reloaded = makeQueue({ storeName }).queue;
+		await reloaded.start();
+		expect(reloaded.get(job.id)?.createItemRequest).toEqual({
+			body: { locationId: LOCATION, name: "Hat" },
+			fieldsVersion: 0,
+		});
+	});
+
+	it("retries a 409 idempotency_in_progress", async () => {
+		let busy = true;
+		backend.use((c) => {
+			if (c.url === "/api/items" && busy) {
+				busy = false;
+				return json({ error: "idempotency_in_progress", message: "busy" }, 409);
+			}
+			return undefined;
+		});
+		const { queue } = makeQueue();
+		await queue.start();
+		const job = await queue.enqueueCapture({
+			blob: photo(),
+			locationId: LOCATION,
+			sessionId: null,
+		});
+		await queue.whenIdle();
+		expect(queue.get(job.id)?.status).toBe("retrying");
+		await vi.advanceTimersByTimeAsync(1000);
+		await queue.whenIdle();
+		expect(queue.get(job.id)?.status).toBe("done");
+		expect(backend.find("POST", "/api/items")).toHaveLength(2);
 	});
 
 	it("uploads again when /complete cannot find the object", async () => {
