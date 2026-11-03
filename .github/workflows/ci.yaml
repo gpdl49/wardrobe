@@ -72,7 +72,7 @@ jobs:
     # This runner sets ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER, so a job without a
     # container: block is rejected before any step runs.
     container:
-      image: quay.io/buildah/stable:v1.43
+      image: quay.io/buildah/stable@sha256:ef42cb6cbbe374d1f2d9c8c8e65610b2c21beb277562b6d99a4b632cb78faa70
       options: --privileged
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
