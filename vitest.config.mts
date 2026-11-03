@@ -15,6 +15,7 @@ export default defineConfig({
 		include: [
 			"lib/**/*.test.ts",
 			"components/**/*.test.ts",
+			"components/**/*.test.tsx",
 			"test/**/*.test.ts",
 		],
 		globalSetup: ["test/global-setup.ts"],
