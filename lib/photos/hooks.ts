@@ -1,3 +1,4 @@
+import { enqueuePhotoAnalyses } from "@/lib/analyses/enqueue";
 import type { Photo } from "@/lib/generated/prisma/client";
 
 /**
@@ -5,4 +6,6 @@ import type { Photo } from "@/lib/generated/prisma/client";
  * place follow-up work (image analysis) plugs in. The `photo.renditions` job
  * logs and swallows errors from here, so keep it to enqueueing.
  */
-export async function onPhotoReady(_photo: Photo): Promise<void> {}
+export async function onPhotoReady(photo: Photo): Promise<void> {
+	await enqueuePhotoAnalyses(photo);
+}

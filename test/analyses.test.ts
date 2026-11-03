@@ -16,6 +16,7 @@ import { db } from "@/lib/db";
 import { resetEnvCache } from "@/lib/env";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { enqueue } from "@/lib/jobs/queue";
+import { onPhotoReady } from "@/lib/photos/hooks";
 import { getObjectBytes } from "@/lib/s3";
 import { describeWithDb, resetDb } from "@/test/helpers/db";
 import { makeItem } from "@/test/helpers/fixtures";
@@ -214,6 +215,17 @@ describeWithDb("analyses", () => {
 				status: "failed",
 				error: "Could not enqueue: connection refused",
 			});
+		});
+	});
+
+	describe("onPhotoReady", () => {
+		it("enqueues the photo's analyses", async () => {
+			const item = await makeItem();
+			await onPhotoReady(await makePhoto({ itemId: item.id }));
+			expect((await analysesOf(item.id)).map((a) => a.kind)).toEqual([
+				"colors",
+			]);
+			expect(jobNames().map((j) => j.name)).toEqual(["analysis.colors"]);
 		});
 	});
 
