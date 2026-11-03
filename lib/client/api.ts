@@ -326,13 +326,21 @@ export function createApiClient(options: ApiClientOptions = {}) {
 		},
 
 		photos: {
-			/** `/api/photos/{id}/{variant}` (302 to a presigned GET). */
+			/**
+			 * `/api/photos/{id}/{variant}` (302 to a presigned GET); display and
+			 * thumb are 404 until the photo is ready.
+			 */
 			url: (photo: Pick<PhotoDto, "id">, variant: PhotoVariant) =>
 				`${baseUrl}/photos/${enc(photo.id)}/${variant}`,
 			create: (input: CreatePhotoInput) =>
 				request<PhotoUploadDto>("POST", "/photos", { body: input }),
 			complete: (id: string) =>
 				request<PhotoDto>("POST", `/photos/${enc(id)}/complete`),
+			/** Assign a photo to an item (or unassign with null) or change its kind. */
+			update: (
+				id: string,
+				input: { itemId?: string | null; kind?: PhotoKind },
+			) => request<PhotoDto>("PATCH", `/photos/${enc(id)}`, { body: input }),
 			delete: (id: string) => request<void>("DELETE", `/photos/${enc(id)}`),
 			/**
 			 * The whole upload: create, PUT the bytes to the presigned URL, then
