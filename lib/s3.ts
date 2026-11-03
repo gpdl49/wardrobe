@@ -1,6 +1,8 @@
 import {
 	DeleteObjectsCommand,
 	GetObjectCommand,
+	HeadObjectCommand,
+	NotFound,
 	PutObjectCommand,
 	S3Client,
 } from "@aws-sdk/client-s3";
@@ -61,6 +63,11 @@ let client: S3Client | undefined;
 export function s3(): S3Client {
 	client ??= createS3Client(env());
 	return client;
+}
+
+/** Tests only: use this client (e.g. one with a stubbed `send`); undefined resets. */
+export function setS3Client(override: S3Client | undefined): void {
+	client = override;
 }
 
 export type PresignedPut = {
@@ -146,3 +153,27 @@ export async function deleteObjects(keys: string[]): Promise<void> {
 /** Every object key a photo may have. */
 export const allPhotoKeys = (photoId: string) =>
 	PHOTO_VARIANTS.map((variant) => photoKey(photoId, variant));
+
+export type ObjectHead = { size: number; contentType: string | undefined };
+
+/** Server-side HEAD (upload completion); null when the object does not exist. */
+export async function headObject(key: string): Promise<ObjectHead | null> {
+	try {
+		const response = await s3().send(
+			new HeadObjectCommand({ Bucket: env().PHOTO_BUCKET, Key: key }),
+		);
+		return {
+			size: response.ContentLength ?? 0,
+			contentType: response.ContentType,
+		};
+	} catch (err) {
+		if (
+			err instanceof NotFound ||
+			(err as { $metadata?: { httpStatusCode?: number } }).$metadata
+				?.httpStatusCode === 404
+		) {
+			return null;
+		}
+		throw err;
+	}
+}

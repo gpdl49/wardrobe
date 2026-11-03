@@ -71,6 +71,21 @@ prisma/              schema, migrations, seed.mjs
 test/                integration tests and helpers
 ```
 
+## Photos
+
+`POST /api/photos` creates a `pending` photo and returns a presigned PUT for
+`photos/<id>/original`; the browser uploads, then calls
+`POST /api/photos/{id}/complete`, which checks the object (HEAD) and queues
+the `photo.renditions` job. The job writes `display.webp` (1600 px) and
+`thumb.webp` (400 px) with sharp, oriented and without metadata, records
+dimensions and blurhash, marks the photo `ready`, gives its item a cover if it has
+none and calls `onPhotoReady` (`lib/photos/hooks.ts`). `PATCH /api/photos/{id}`
+assigns a packing capture to an item or changes its kind.
+
+HEIC/HEIF is not decoded server-side: sharp's prebuilt libvips (also on
+linux-musl) ships libheif without an HEVC decoder. The API answers 422
+`unsupported_format`; the browser converts to JPEG before uploading.
+
 ## Container
 
 `Dockerfile` builds the standalone server. The entrypoint runs
