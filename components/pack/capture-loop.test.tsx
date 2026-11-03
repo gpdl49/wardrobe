@@ -72,7 +72,9 @@ afterEach(() => {
 });
 
 function setup() {
-	const { queue } = makeQueue();
+	// One upload at a time, so the fake backend hands out item-1, item-2 in
+	// capture order; concurrency itself is covered by the queue tests.
+	const { queue } = makeQueue({ concurrency: 1 });
 	const onEnd = vi.fn();
 	const user = userEvent.setup();
 	render(
@@ -123,7 +125,7 @@ describe("CaptureLoop", () => {
 		await queue.whenIdle();
 
 		await user.type(
-			screen.getByRole("textbox", { name: "Name" }),
+			await screen.findByRole("textbox", { name: "Name" }),
 			"Grey cardigan{Enter}",
 		);
 		await user.click(screen.getByRole("button", { name: "Tops" }));

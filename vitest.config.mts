@@ -23,6 +23,11 @@ export default defineConfig({
 		setupFiles: ["test/setup.ts", "test/setup-dom.ts"],
 		// Integration tests share one database and reset it between tests.
 		fileParallelism: false,
+		// Integration tests hit Postgres, pg-boss and sharp; on a loaded machine
+		// a cold worker can exceed vitest's 5 s default without anything being
+		// stuck (no lock waits were seen while they timed out).
+		testTimeout: 20_000,
+		hookTimeout: 20_000,
 		reporters: process.env.CI ? ["default", "github-actions"] : ["default"],
 	},
 });
