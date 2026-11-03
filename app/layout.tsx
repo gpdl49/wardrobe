@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { BottomNav, MobileMenu, TopNav } from "@/components/nav";
+import { Providers } from "@/components/providers";
 import { UploadQueueResumer } from "@/lib/client/upload";
 import "./globals.css";
 
@@ -43,7 +44,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 					</div>
 				</header>
 				<main className="mx-auto max-w-6xl px-4 py-6 pb-24 md:pb-6">
-					{children}
+					<Providers>{children}</Providers>
 				</main>
 				<BottomNav />
 				{/* Pending photo uploads resume on every page. */}
