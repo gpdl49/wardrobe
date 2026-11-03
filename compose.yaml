@@ -1,0 +1,41 @@
+# Local services for `pnpm dev` and `pnpm test` (see README.md).
+#   docker compose up -d
+services:
+  postgres:
+    image: postgres:18-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
+    environment:
+      POSTGRES_USER: wardrobe
+      POSTGRES_PASSWORD: wardrobe
+      POSTGRES_DB: wardrobe
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres:/var/lib/postgresql
+      - ./scripts/create-test-db.sql:/docker-entrypoint-initdb.d/create-test-db.sql:ro
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: wardrobe
+      MINIO_ROOT_PASSWORD: wardrobe-secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio:/data
+
+  # Creates the bucket with the CORS rule the browser uploads need.
+  minio-init:
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 wardrobe wardrobe-secret; do sleep 1; done;
+      mc mb --ignore-existing local/centerpoint-wardrobe-photos
+      "
+
+volumes:
+  postgres:
+  minio:

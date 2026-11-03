@@ -1,0 +1,11 @@
+.git
+.github
+.next
+node_modules
+coverage
+lib/generated
+.env*
+*.md
+compose.yaml
+Dockerfile
+.dockerignore
