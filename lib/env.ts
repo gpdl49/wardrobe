@@ -13,7 +13,15 @@ const optional = <T extends z.ZodType>(schema: T) =>
 const withDefault = <T extends z.ZodType>(schema: T, fallback: z.input<T>) =>
 	z.preprocess((v) => (v === "" || v === undefined ? fallback : v), schema);
 
-export const DEFAULT_VISION_MODEL = "google/gemini-2.5-flash";
+/**
+ * OpenRouter vision model: GA, accepts images, supports strict JSON-schema
+ * structured outputs and reads labels well, at $0.25/$1.50 per M tokens
+ * (~$0.001 per analysis with 1-3 downscaled photos), far inside the
+ * $5/month key limit. Cheaper alternatives with structured outputs:
+ * google/gemini-2.5-flash-lite, qwen/qwen3.5-flash-02-23,
+ * mistralai/mistral-small-3.2-24b-instruct; stronger: google/gemini-3.6-flash.
+ */
+export const DEFAULT_VISION_MODEL = "google/gemini-3.1-flash-lite";
 
 const envSchema = z
 	.object({
