@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer PR run replaces an older one; on main a newer run waits, so a
+# publish already pushing is never cancelled halfway.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: wardrobe_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      CI: "true"
+      # The database name must contain "test": the suite wipes it.
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/wardrobe_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+  publish:
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: homestacks-runners
+    permissions:
+      contents: read
+      packages: write
+    # This runner sets ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER, so a job without a
+    # container: block is rejected before any step runs.
+    container:
+      image: quay.io/buildah/stable:v1.43
+      options: --privileged
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Login to GHCR
+        run: |
+          printf '%s' '${{ secrets.GITHUB_TOKEN }}' | buildah login ghcr.io \
+            --username '${{ github.actor }}' \
+            --password-stdin
+
+      - name: Build image
+        run: |
+          buildah --storage-driver=vfs bud \
+            --isolation=chroot \
+            --file Dockerfile \
+            --tag ghcr.io/gpdl49/wardrobe:main \
+            --tag ghcr.io/gpdl49/wardrobe:main-${{ github.sha }} \
+            .
+
+      - name: Push image
+        run: |
+          for tag in ghcr.io/gpdl49/wardrobe:main ghcr.io/gpdl49/wardrobe:main-${{ github.sha }}; do
+            buildah --storage-driver=vfs push --tls-verify=true "$tag" "docker://$tag"
+          done
