@@ -1,6 +1,6 @@
 /**
  * In-browser downscale before upload: a 12 MP iPhone photo becomes a ~1 MB
- * JPEG, and HEIC (which the server may not decode) becomes JPEG. Decoding uses
+ * JPEG, and HEIC (which the server rejects) becomes JPEG. Decoding uses
  * createImageBitmap, falling back to <img> (which decodes HEIC on iOS 17+).
  */
 
@@ -40,13 +40,11 @@ export type Prepared = {
 	preview: Blob | null;
 };
 
-/** Content types the server accepts as originals (docs/wardrobe.md, object keys). */
-const ACCEPTED = new Set([
-	"image/jpeg",
-	"image/png",
-	"image/webp",
-	"image/heic",
-]);
+/**
+ * Content types the server can decode as originals. Not HEIC/HEIF: the API
+ * rejects them (422 unsupported_format), so they must convert here.
+ */
+const ACCEPTED = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 type Drawable = { source: CanvasImageSource; size: Size; close(): void };
 
@@ -133,7 +131,10 @@ export async function prepareImage(blob: Blob): Promise<Prepared> {
 		if (ACCEPTED.has(blob.type)) {
 			return { upload: blob, preview: null };
 		}
-		throw err;
+		throw new Error(
+			`This browser cannot convert the photo (${blob.type || "unknown type"}) to JPEG`,
+			{ cause: err },
+		);
 	}
 	try {
 		const upload = await render(image, UPLOAD_MAX_EDGE, UPLOAD_QUALITY);

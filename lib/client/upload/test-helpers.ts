@@ -176,9 +176,13 @@ export function fakeBackend() {
 	};
 }
 
+/**
+ * Stands in for the canvas downscale. Ignores the input's bytes: under jsdom,
+ * Blobs that went through fake IndexedDB lose their methods.
+ */
 export const fakePrepare = vi.fn(
-	async (blob: Blob): Promise<Prepared> => ({
-		upload: new Blob([await blob.arrayBuffer()], { type: "image/jpeg" }),
+	async (_blob: Blob): Promise<Prepared> => ({
+		upload: new Blob(["jpeg-bytes"], { type: "image/jpeg" }),
 		preview: new Blob(["preview"], { type: "image/jpeg" }),
 	}),
 );

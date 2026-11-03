@@ -586,7 +586,17 @@ export class UploadQueue {
 			}
 			case "complete": {
 				if (!job.photoId) throw new Error("No photo to complete");
-				const photo = await this.api.completePhoto(job.photoId);
+				let photo: Awaited<ReturnType<UploadApi["completePhoto"]>>;
+				try {
+					photo = await this.api.completePhoto(job.photoId);
+				} catch (err) {
+					if (err instanceof HttpError && err.status === 422) {
+						// The server cannot find the object: upload it again.
+						await this.patch(job.id, { uploaded: false });
+						throw new RetryableError(err.message);
+					}
+					throw err;
+				}
 				await this.patch(job.id, { ...ok, photo });
 				return;
 			}

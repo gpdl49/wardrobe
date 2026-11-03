@@ -411,6 +411,53 @@ describe("UploadQueue", () => {
 		);
 	});
 
+	it("uploads again when /complete cannot find the object", async () => {
+		let missing = true;
+		backend.use((c) => {
+			if (c.url.endsWith("/complete") && missing) {
+				missing = false;
+				return json(
+					{ error: "unprocessable", message: "Photo was not uploaded" },
+					422,
+				);
+			}
+			return undefined;
+		});
+		const { queue } = makeQueue();
+		await queue.start();
+		const job = await queue.enqueueCapture({
+			blob: photo(),
+			locationId: LOCATION,
+			sessionId: null,
+		});
+		await queue.whenIdle();
+		expect(queue.get(job.id)).toMatchObject({
+			status: "retrying",
+			uploaded: false,
+		});
+		await vi.advanceTimersByTimeAsync(1000);
+		await queue.whenIdle();
+		expect(queue.get(job.id)?.status).toBe("done");
+		expect(backend.find("PUT", "https://s3.test/*")).toHaveLength(2);
+		expect(backend.find("POST", "/api/photos")).toHaveLength(1);
+	});
+
+	it("fails permanently when the photo cannot be converted", async () => {
+		fakePrepare.mockRejectedValueOnce(
+			new Error("This browser cannot convert the photo (image/heic) to JPEG"),
+		);
+		const { queue } = makeQueue();
+		await queue.start();
+		const job = await queue.enqueueCapture({
+			blob: photo(),
+			locationId: LOCATION,
+			sessionId: null,
+		});
+		await queue.whenIdle();
+		expect(queue.get(job.id)).toMatchObject({ status: "failed" });
+		expect(backend.calls).toHaveLength(0);
+	});
+
 	it("pauses on an expired sign-in and resumes on kick()", async () => {
 		let signedIn = false;
 		backend.use((c) =>
