@@ -1,4 +1,4 @@
-import { afterEach } from "vitest";
+import { afterEach, vi } from "vitest";
 
 // Only for files that opt into jsdom (`// @vitest-environment jsdom`):
 // jest-dom matchers and unmounting rendered trees between tests.
@@ -7,5 +7,6 @@ if (typeof document !== "undefined") {
 	const { cleanup } = await import("@testing-library/react");
 	afterEach(() => {
 		cleanup();
+		vi.unstubAllGlobals();
 	});
 }

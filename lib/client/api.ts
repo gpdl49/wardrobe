@@ -20,6 +20,7 @@ import type {
 	LocationDto,
 	LocationKind,
 	MeDto,
+	PackingSessionDetailDto,
 	PackingSessionDto,
 	PhotoDto,
 	PhotoKind,
@@ -100,9 +101,9 @@ export interface CreateCategoryInput {
 export type UpdateCategoryInput = Partial<CreateCategoryInput>;
 
 export interface ItemsQuery {
-	/** Location id. */
+	/** Location id or code. */
 	location?: string;
-	/** Category id. */
+	/** Category id or slug; includes its subcategories. */
 	category?: string;
 	/** Tag name. */
 	tag?: string;
@@ -129,12 +130,16 @@ export interface ItemInput {
 	locationId?: string | null;
 	notes?: string | null;
 	tags?: string[];
+	/** PATCH only; must be one of the item's own photos. */
 	coverPhotoId?: string | null;
+	/** Packing session a location change belongs to (recorded on the Movement). */
+	sessionId?: string;
 }
 
 export interface MoveItemsInput {
 	itemIds: string[];
-	toLocationId: string;
+	/** null takes the items out of any location. */
+	toLocationId: string | null;
 	sessionId?: string;
 }
 
@@ -362,6 +367,10 @@ export function createApiClient(options: ApiClientOptions = {}) {
 		},
 
 		sessions: {
+			get: (id: string, signal?: AbortSignal) =>
+				request<PackingSessionDetailDto>("GET", `/sessions/${enc(id)}`, {
+					signal,
+				}),
 			start: (mode: SessionMode, locationId: string) =>
 				request<PackingSessionDto>("POST", "/sessions", {
 					body: { mode, locationId },
