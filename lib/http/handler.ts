@@ -7,7 +7,7 @@ export type RouteParams<P extends Record<string, string>> = {
 	params: Promise<P>;
 };
 
-type AuthedHandler<C> = (
+export type AuthedHandler<C> = (
 	request: Request,
 	context: C,
 	user: User,

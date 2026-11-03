@@ -315,6 +315,7 @@ export class UploadQueue {
 			createdAt: this.now(),
 			fieldsVersion: 0,
 			syncedFieldsVersion: 0,
+			createItemRequest: null,
 			prepared: false,
 			contentType: null,
 			size: null,
@@ -515,19 +516,26 @@ export class UploadQueue {
 				return;
 			}
 			case "createItem": {
-				const version = job.fieldsVersion;
-				const item = await this.api.createItem(
-					{
-						locationId: job.locationId,
-						...(job.sessionId ? { sessionId: job.sessionId } : {}),
-						...present(job.fields),
-					},
-					`item-${job.id}`,
-				);
+				// Frozen (and persisted) before the first attempt: a retry after a
+				// lost response must send the same body with the same key, or the
+				// server rejects it; fields edited meanwhile are PATCHed after.
+				let request = job.createItemRequest;
+				if (!request) {
+					request = {
+						body: {
+							locationId: job.locationId,
+							...(job.sessionId ? { sessionId: job.sessionId } : {}),
+							...present(job.fields),
+						},
+						fieldsVersion: job.fieldsVersion,
+					};
+					await this.patch(job.id, { createItemRequest: request });
+				}
+				const item = await this.api.createItem(request.body, `item-${job.id}`);
 				await this.patch(job.id, {
 					...ok,
 					itemId: item.id,
-					syncedFieldsVersion: version,
+					syncedFieldsVersion: request.fieldsVersion,
 				});
 				return;
 			}
@@ -543,6 +551,8 @@ export class UploadQueue {
 						contentType: job.contentType ?? "image/jpeg",
 						size: job.size ?? 0,
 					},
+					// Same key after an expired presigned URL too: the server replays
+					// the same photo with a freshly presigned PUT.
 					`photo-${job.id}`,
 				);
 				await this.patch(job.id, {

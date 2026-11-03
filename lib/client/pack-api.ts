@@ -43,11 +43,16 @@ export class AuthRequiredError extends Error {
 	}
 }
 
-/** Network failures, timeouts, throttling and server errors are worth retrying. */
+/**
+ * Network failures, timeouts, throttling and server errors are worth
+ * retrying; so is a 409 `idempotency_in_progress` (an earlier attempt with the
+ * same Idempotency-Key is still running on the server).
+ */
 export function isRetryable(err: unknown): boolean {
 	if (err instanceof HttpError) {
 		return (
 			err.status === 0 ||
+			(err.status === 409 && err.code === "idempotency_in_progress") ||
 			err.status === 408 ||
 			err.status === 425 ||
 			err.status === 429 ||
@@ -160,9 +165,19 @@ export type ItemFields = {
 	categoryId?: string | null;
 };
 
+/** POST /api/items body; `sessionId` is recorded on the item's first Movement. */
+export type CreateItemBody = ItemFields & {
+	locationId: string;
+	sessionId?: string;
+};
+
+/**
+ * Retries must send the same `idempotencyKey` and the same body: the server
+ * replays the first response for a repeat, and 422s
+ * (`idempotency_key_reused`) when the body differs.
+ */
 export function createItem(
-	/** `sessionId` is recorded on the item's first Movement. */
-	input: ItemFields & { locationId: string; sessionId?: string },
+	input: CreateItemBody,
 	idempotencyKey?: string,
 ): Promise<ItemSummaryDto> {
 	return api("/api/items", {

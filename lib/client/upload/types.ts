@@ -1,5 +1,5 @@
 import type { PhotoDto, PhotoKind } from "@/lib/api/types";
-import type { ItemFields } from "@/lib/client/pack-api";
+import type { CreateItemBody, ItemFields } from "@/lib/client/pack-api";
 
 /**
  * - queued: waiting for a free slot (or for its item, for a label photo)
@@ -12,7 +12,10 @@ export type JobStatus = "queued" | "running" | "retrying" | "failed" | "done";
 
 /** One captured photo on its way to the server. Persisted in IndexedDB. */
 export interface UploadJob {
-	/** Local id (also the idempotency key prefix). */
+	/**
+	 * Local id. The Idempotency-Keys are `item-<id>` and `photo-<id>`: the job
+	 * is persisted, so retries and reloads reuse them.
+	 */
 	id: string;
 	createdAt: number;
 	sessionId: string | null;
@@ -27,6 +30,12 @@ export interface UploadJob {
 	fields: ItemFields;
 	fieldsVersion: number;
 	syncedFieldsVersion: number;
+	/**
+	 * The POST /api/items body, frozen at the first attempt: retries reuse the
+	 * Idempotency-Key, so they must send the same body (later edits are
+	 * PATCHed). Absent on jobs persisted before it existed.
+	 */
+	createItemRequest?: { body: CreateItemBody; fieldsVersion: number } | null;
 	/** Downscaled and stored as the `upload` blob. */
 	prepared: boolean;
 	contentType: string | null;
