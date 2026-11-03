@@ -155,14 +155,17 @@ export function useApplySuggestion(itemId: string) {
 			analysisId: string;
 			fields: SuggestionField[];
 		}) => api.analyses.apply(itemId, analysisId, fields),
-		onSuccess: () => invalidateItems(client, itemId),
+		onSuccess: (item) => {
+			client.setQueryData(queryKeys.item(itemId), item);
+			invalidateItems(client, itemId);
+		},
 	});
 }
 
 export function useRerunAnalysis(itemId: string) {
 	const client = useQueryClient();
 	return useMutation({
-		mutationFn: () => api.analyses.rerun(itemId),
+		mutationFn: () => api.analyses.run(itemId),
 		onSuccess: () =>
 			client.invalidateQueries({ queryKey: queryKeys.item(itemId) }),
 	});

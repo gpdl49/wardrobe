@@ -9,6 +9,7 @@
 
 import type {
 	AnalysisDto,
+	AnalysisKind,
 	CategoryDto,
 	ItemColor,
 	ItemDetailDto,
@@ -154,8 +155,8 @@ export interface CreatePhotoInput {
 export type SuggestionField = Exclude<keyof ItemSuggestion, "labelText">;
 
 export interface RerunAnalysisInput {
-	photoId?: string;
-	kind?: AnalysisDto["kind"];
+	/** Defaults to every kind the server can run. */
+	kinds?: AnalysisKind[];
 }
 
 // ---------------------------------------------------------------------------
@@ -307,22 +308,29 @@ export function createApiClient(options: ApiClientOptions = {}) {
 		},
 
 		analyses: {
-			/** Copies the chosen suggestion fields onto the item. */
+			/** Newest first. */
+			list: (itemId: string, signal?: AbortSignal) =>
+				request<AnalysisDto[]>("GET", `/items/${enc(itemId)}/analyses`, {
+					signal,
+				}),
+			/**
+			 * Queues fresh analyses of the item's photos (202). 409 when vision is
+			 * disabled or the item has no ready photo.
+			 */
+			run: (itemId: string, input: RerunAnalysisInput = {}) =>
+				request<AnalysisDto[]>("POST", `/items/${enc(itemId)}/analyses`, {
+					body: input,
+				}),
+			/**
+			 * Copies the chosen suggestion fields onto the item and returns it.
+			 * 409 if the analysis is not done, 422 if its category was deleted.
+			 */
 			apply: (itemId: string, analysisId: string, fields: SuggestionField[]) =>
-				request<ItemSummaryDto>(
+				request<ItemDetailDto>(
 					"POST",
 					`/items/${enc(itemId)}/analyses/${enc(analysisId)}/apply`,
 					{ body: { fields } },
 				),
-			/**
-			 * Not in the contract yet: queues a fresh analysis of the item's
-			 * photos (or one photo). Expected to answer 202 with the queued
-			 * analyses.
-			 */
-			rerun: (itemId: string, input: RerunAnalysisInput = {}) =>
-				request<AnalysisDto[]>("POST", `/items/${enc(itemId)}/analyses`, {
-					body: input,
-				}),
 		},
 
 		photos: {

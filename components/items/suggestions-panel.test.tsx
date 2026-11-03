@@ -47,7 +47,7 @@ describe("SuggestionsPanel", () => {
 	it("accepts one field, then all remaining fields", async () => {
 		const fetch = mockApi({
 			"GET /api/categories": categories,
-			"POST /api/items/item-1/analyses/an-1/apply": { id: "item-1" },
+			"POST /api/items/item-1/analyses/an-1/apply": item,
 			"GET /api/items/item-1": item,
 		});
 		const user = userEvent.setup();
@@ -91,16 +91,25 @@ describe("SuggestionsPanel", () => {
 		);
 	});
 
-	it("re-runs analysis and explains when the server does not support it", async () => {
-		const fetch = mockApi({ "GET /api/categories": categories });
+	it("re-runs analysis and shows why the server refused", async () => {
+		const fetch = mockApi({
+			"GET /api/categories": categories,
+			"POST /api/items/item-1/analyses": Response.json(
+				{ error: "conflict", message: "The item has no ready photo" },
+				{ status: 409 },
+			),
+		});
 		const user = userEvent.setup();
 		renderWithQuery(<SuggestionsPanel item={item} />);
 		await user.click(screen.getByRole("button", { name: "Re-run analysis" }));
-		expect(await screen.findByRole("alert")).toHaveTextContent(/not available/);
+		expect(await screen.findByRole("alert")).toHaveTextContent(
+			"The item has no ready photo",
+		);
 		expect(requests(fetch)).toContainEqual(
 			expect.objectContaining({
 				method: "POST",
 				path: "/api/items/item-1/analyses",
+				body: {},
 			}),
 		);
 	});

@@ -116,7 +116,7 @@ export function SuggestionsPanel({ item }: { item: ItemDetailDto }) {
 					className="m-4"
 					error={
 						isApiError(rerun.error, 404) || isApiError(rerun.error, 405)
-							? "Re-running analysis is not available on this server yet."
+							? "Re-running analysis is not available on this server."
 							: errorMessage(rerun.error)
 					}
 				/>
