@@ -15,6 +15,13 @@ describeWithDb("job queue", () => {
 		).rejects.toThrow();
 	});
 
+	it("enqueues before the worker has created the queue", async () => {
+		await stopBoss();
+		const id = await enqueue(systemPing, { message: "no worker yet" });
+		expect(id).toBeTruthy();
+		await stopBoss();
+	});
+
 	it("runs an enqueued job in the in-process worker", async () => {
 		const info = vi.spyOn(console, "info").mockImplementation(() => {});
 		await startWorker();

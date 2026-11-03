@@ -9,6 +9,7 @@ import type { JobData, JobDefinition } from "@/lib/jobs/define";
  */
 const globalForBoss = globalThis as unknown as {
 	boss: Promise<PgBoss> | undefined;
+	queues: Set<string> | undefined;
 };
 
 export function getBoss(): Promise<PgBoss> {
@@ -32,11 +33,21 @@ export async function enqueue<J extends JobDefinition>(
 ): Promise<string | null> {
 	const payload = job.schema.parse(data) as object;
 	const boss = await getBoss();
+	// pg-boss drops sends to a queue that does not exist yet. The worker
+	// creates every queue at start, but with JOBS_ENABLED=false (or before
+	// it has started) enqueue must create the queue itself; createQueue is
+	// idempotent, so do it once per process.
+	globalForBoss.queues ??= new Set();
+	if (!globalForBoss.queues.has(job.name)) {
+		await boss.createQueue(job.name, job.queue);
+		globalForBoss.queues.add(job.name);
+	}
 	return boss.send(job.name, payload, options);
 }
 
 export async function stopBoss(): Promise<void> {
 	const pending = globalForBoss.boss;
 	globalForBoss.boss = undefined;
+	globalForBoss.queues = undefined;
 	await (await pending)?.stop({ graceful: true, timeout: 10_000 });
 }
