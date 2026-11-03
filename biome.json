@@ -1,0 +1,33 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.6.4/schema.json",
+	"vcs": {
+		"enabled": true,
+		"clientKind": "git",
+		"useIgnoreFile": true
+	},
+	"css": {
+		"parser": {
+			"tailwindDirectives": true
+		}
+	},
+	"files": {
+		"includes": ["**", "!lib/generated", "!prisma/migrations"]
+	},
+	"assist": {
+		"actions": {
+			"source": {
+				"organizeImports": "on"
+			}
+		}
+	},
+	"markdown": {
+		"formatter": {
+			"enabled": false
+		}
+	},
+	"yaml": {
+		"formatter": {
+			"enabled": false
+		}
+	}
+}
