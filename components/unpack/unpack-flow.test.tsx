@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type UnpackApi, UnpackFlow } from "@/components/unpack/unpack-flow";
 import type { LocationDetailDto, LocationDto } from "@/lib/api/types";
+import { ApiError } from "@/lib/client/api";
 import { itemDto, json } from "@/lib/client/upload/test-helpers";
 
 vi.mock("next/navigation", () => ({
@@ -127,10 +128,10 @@ describe("UnpackFlow", () => {
 		]);
 		await user.click(options[0] as HTMLElement);
 
-		expect(api.startSession).toHaveBeenCalledWith({
-			mode: "unpack",
-			locationId: bag.id,
-		});
+		expect(api.startSession).toHaveBeenCalledWith(
+			{ mode: "unpack", locationId: bag.id },
+			{ idempotencyKey: expect.any(String) },
+		);
 		expect(api.moveItems).toHaveBeenCalledWith({
 			itemIds: ["i-1", "i-2"],
 			toLocationId: closet.id,
@@ -172,5 +173,49 @@ describe("UnpackFlow", () => {
 			"Session has ended",
 		);
 		expect(itemButton("Navy jumper")).toHaveAttribute("aria-pressed", "true");
+	});
+
+	it("retries a failed session start with the same Idempotency-Key", async () => {
+		api.startSession.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+		const user = setup();
+		await screen.findByText("Navy jumper");
+		await user.click(itemButton("Navy jumper"));
+		await user.click(screen.getByRole("button", { name: "Move 1 item…" }));
+		await user.click(await screen.findByRole("button", { name: /CL-BEDROOM/ }));
+		expect(await screen.findByRole("alert")).toHaveTextContent(
+			"Failed to fetch",
+		);
+		expect(api.moveItems).not.toHaveBeenCalled();
+
+		await user.click(screen.getByRole("button", { name: "Move 1 item…" }));
+		await user.click(await screen.findByRole("button", { name: /CL-BEDROOM/ }));
+		expect(await screen.findByRole("status")).toHaveTextContent(
+			"Moved 1 to CL-BEDROOM",
+		);
+		const keys = api.startSession.mock.calls.map((c) => c[1]?.idempotencyKey);
+		expect(keys).toHaveLength(2);
+		expect(keys[0]).toEqual(expect.any(String));
+		expect(keys[1]).toBe(keys[0]);
+	});
+
+	it("starts a new session with a new key after the session ended elsewhere", async () => {
+		api.moveItems.mockRejectedValueOnce(
+			new ApiError(409, "conflict", "Session has ended"),
+		);
+		const user = setup();
+		await screen.findByText("Navy jumper");
+		await user.click(itemButton("Navy jumper"));
+		await user.click(screen.getByRole("button", { name: "Move 1 item…" }));
+		await user.click(await screen.findByRole("button", { name: /CL-BEDROOM/ }));
+		expect(await screen.findByRole("alert")).toHaveTextContent(
+			"Session has ended",
+		);
+
+		await user.click(screen.getByRole("button", { name: "Move 1 item…" }));
+		await user.click(await screen.findByRole("button", { name: /CL-BEDROOM/ }));
+		expect(await screen.findByRole("status")).toBeInTheDocument();
+		const keys = api.startSession.mock.calls.map((c) => c[1]?.idempotencyKey);
+		expect(keys).toHaveLength(2);
+		expect(keys[1]).not.toBe(keys[0]);
 	});
 });

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { PhotoStatus } from "@/lib/api/types";
-import { getItem } from "@/lib/client/pack-api";
+import { api } from "@/lib/client/api";
 import type { UploadJob } from "@/lib/client/upload/types";
 
 const POLL_MS = 4000;
@@ -37,7 +37,7 @@ export function usePhotoStatuses(
 		const poll = async () => {
 			polls += 1;
 			const results = await Promise.allSettled(
-				itemIds.split(",").map((id) => getItem(id)),
+				itemIds.split(",").map((id) => api.items.get(id)),
 			);
 			if (cancelled) return;
 			const next: Record<string, PhotoStatus> = {};

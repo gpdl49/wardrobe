@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { ApiError, createApiClient, isApiError, toQueryString } from "./api";
+import {
+	ApiError,
+	createApiClient,
+	isApiError,
+	isRetryable,
+	isSignInExpired,
+	toQueryString,
+} from "./api";
 
 function json(body: unknown, status = 200): Response {
 	return new Response(JSON.stringify(body), {
@@ -180,5 +187,156 @@ describe("api client", () => {
 		} finally {
 			vi.unstubAllGlobals();
 		}
+	});
+});
+
+describe("idempotency keys", () => {
+	it("sends Idempotency-Key on the create calls that take one", async () => {
+		const { fetch, api } = setup(
+			json({ id: "i1" }, 201),
+			json({ photo: { id: "p1" }, uploadUrl: "u", uploadHeaders: {} }, 201),
+			json({ id: "s1" }, 201),
+		);
+		await api.items.create({ locationId: "l1" }, { idempotencyKey: "item-1" });
+		await api.photos.create(
+			{ kind: "main", contentType: "image/jpeg", size: 3 },
+			{ idempotencyKey: "photo-1" },
+		);
+		await api.sessions.start("pack", "l1", { idempotencyKey: "sess-1" });
+
+		expect(call(fetch, 0)).toMatchObject({
+			url: "/api/items",
+			method: "POST",
+			body: { locationId: "l1" },
+		});
+		expect(call(fetch, 0).headers?.["Idempotency-Key"]).toBe("item-1");
+		expect(call(fetch, 1).headers?.["Idempotency-Key"]).toBe("photo-1");
+		expect(call(fetch, 2)).toMatchObject({
+			url: "/api/sessions",
+			body: { mode: "pack", locationId: "l1" },
+		});
+		expect(call(fetch, 2).headers?.["Idempotency-Key"]).toBe("sess-1");
+	});
+
+	it("sends no Idempotency-Key unless asked", async () => {
+		const { fetch, api } = setup(json({ id: "i1" }, 201), json({ id: "s1" }));
+		await api.items.create({ locationId: "l1" });
+		await api.sessions.start("unpack", "l1");
+		expect(call(fetch, 0).headers).not.toHaveProperty("Idempotency-Key");
+		expect(call(fetch, 1).headers).not.toHaveProperty("Idempotency-Key");
+	});
+});
+
+describe("sign-in expiry", () => {
+	it("fetches API calls without following redirects", async () => {
+		const { fetch, api } = setup(json([]));
+		await api.tags.list();
+		expect(fetch.mock.calls[0]?.[1]).toMatchObject({
+			redirect: "manual",
+			credentials: "same-origin",
+		});
+	});
+
+	it("treats an opaque redirect (browser, redirect: manual) as an expired session", async () => {
+		const opaque = {
+			type: "opaqueredirect",
+			status: 0,
+			ok: false,
+			redirected: false,
+			statusText: "",
+			headers: new Headers(),
+		} as unknown as Response;
+		const { api } = setup(opaque);
+		const err = await api.items.list().catch((e: unknown) => e);
+		expect(err).toMatchObject({ status: 401, error: "unauthorized" });
+		expect(isSignInExpired(err)).toBe(true);
+		expect(isRetryable(err)).toBe(false);
+	});
+
+	it("treats a bare 3xx (runtimes without opaque redirects) as an expired session", async () => {
+		const { api } = setup(
+			new Response(null, {
+				status: 302,
+				headers: { location: "/oauth2/sign_in" },
+			}),
+		);
+		await expect(api.me()).rejects.toMatchObject({
+			status: 401,
+			error: "unauthorized",
+		});
+	});
+
+	it("treats a 401 as an expired session", async () => {
+		const { api } = setup(
+			json({ error: "unauthorized", message: "Not signed in" }, 401),
+		);
+		const err = await api.me().catch((e: unknown) => e);
+		expect(isSignInExpired(err)).toBe(true);
+		expect(err).toMatchObject({ message: "Not signed in" });
+	});
+
+	it("does not treat other errors as an expired session", () => {
+		expect(isSignInExpired(new ApiError(403, "forbidden", "no"))).toBe(false);
+		expect(isSignInExpired(new TypeError("Failed to fetch"))).toBe(false);
+	});
+});
+
+describe("isRetryable", () => {
+	const api = (status: number, error = "x") =>
+		new ApiError(status, error, "message");
+
+	it("retries network failures, timeouts, throttling and server errors", () => {
+		expect(isRetryable(new TypeError("Failed to fetch"))).toBe(true);
+		expect(isRetryable(new DOMException("aborted", "AbortError"))).toBe(true);
+		expect(isRetryable(new DOMException("slow", "TimeoutError"))).toBe(true);
+		for (const status of [408, 425, 429, 500, 502, 503, 504]) {
+			expect(isRetryable(api(status)), String(status)).toBe(true);
+		}
+	});
+
+	it("retries a 409 idempotency_in_progress, not other conflicts", () => {
+		expect(isRetryable(api(409, "idempotency_in_progress"))).toBe(true);
+		expect(isRetryable(api(409, "conflict"))).toBe(false);
+	});
+
+	it("does not retry other client errors or unknown errors", () => {
+		for (const status of [400, 401, 403, 404, 422]) {
+			expect(isRetryable(api(status)), String(status)).toBe(false);
+		}
+		expect(isRetryable(new Error("boom"))).toBe(false);
+		expect(isRetryable(new DOMException("nope", "NotAllowedError"))).toBe(
+			false,
+		);
+		expect(isRetryable("string")).toBe(false);
+	});
+});
+
+describe("photos.put", () => {
+	it("PUTs the bytes with exactly the presigned headers", async () => {
+		const { fetch, api } = setup(new Response(null, { status: 200 }));
+		const file = new Blob(["abc"], { type: "image/jpeg" });
+		await api.photos.put(
+			"https://s3.example/put?sig=1",
+			{ "content-type": "image/jpeg", "x-amz-meta-a": "b" },
+			file,
+		);
+		const [url, init] = fetch.mock.calls[0] ?? [];
+		expect(url).toBe("https://s3.example/put?sig=1");
+		expect(init).toEqual({
+			method: "PUT",
+			headers: { "content-type": "image/jpeg", "x-amz-meta-a": "b" },
+			body: file,
+			signal: undefined,
+		});
+	});
+
+	it("throws upload_failed with S3's status", async () => {
+		const { api } = setup(new Response("<Error/>", { status: 403 }));
+		const err = await api.photos
+			.put("https://s3.example/put", {}, new Blob(["abc"]))
+			.catch((e: unknown) => e);
+		expect(err).toBeInstanceOf(ApiError);
+		expect(err).toMatchObject({ status: 403, error: "upload_failed" });
+		expect(isRetryable(err)).toBe(false);
 	});
 });

@@ -1,5 +1,14 @@
 import type { PhotoDto, PhotoKind } from "@/lib/api/types";
-import type { CreateItemBody, ItemFields } from "@/lib/client/pack-api";
+import type { ItemInput } from "@/lib/client/api";
+
+/** Quick fields editable from the capture loop. */
+export type ItemFields = Pick<ItemInput, "name" | "categoryId">;
+
+/** POST /api/items body; `sessionId` is recorded on the item's first Movement. */
+export type CreateItemBody = ItemFields & {
+	locationId: string;
+	sessionId?: string;
+};
 
 /**
  * - queued: waiting for a free slot (or for its item, for a label photo)

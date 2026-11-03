@@ -1,14 +1,17 @@
 import type { PhotoKind } from "@/lib/api/types";
-import * as packApi from "@/lib/client/pack-api";
 import {
-	AuthRequiredError,
-	errorMessage,
-	HttpError,
-	type ItemFields,
+	type ApiClient,
+	api as defaultApi,
+	isApiError,
 	isRetryable,
-} from "@/lib/client/pack-api";
+	isSignInExpired,
+} from "@/lib/client/api";
 import type { Prepared } from "@/lib/client/upload/resize";
-import type { QueueStore, UploadJob } from "@/lib/client/upload/types";
+import type {
+	ItemFields,
+	QueueStore,
+	UploadJob,
+} from "@/lib/client/upload/types";
 
 /**
  * Persistent upload queue for captures: downscale → create item → POST
@@ -55,10 +58,11 @@ export function backoffDelay(
 	return Math.round(exp * (0.5 + random() / 2));
 }
 
-export type UploadApi = Pick<
-	typeof packApi,
-	"createItem" | "updateItem" | "createPhoto" | "putObject" | "completePhoto"
->;
+/** The part of the API client the queue uses. */
+export type UploadApi = {
+	items: Pick<ApiClient["items"], "create" | "update">;
+	photos: Pick<ApiClient["photos"], "create" | "put" | "complete">;
+};
 
 export type QueueOptions = {
 	store: QueueStore;
@@ -112,7 +116,7 @@ export class UploadQueue {
 	constructor(options: QueueOptions) {
 		this.store = options.store;
 		this.prepareImage = options.prepare;
-		this.api = options.api ?? packApi;
+		this.api = options.api ?? defaultApi;
 		this.concurrency = options.concurrency ?? 2;
 		this.maxAttempts = options.maxAttempts ?? 8;
 		this.now = options.now ?? Date.now;
@@ -463,7 +467,7 @@ export class UploadQueue {
 	private async fail(id: string, err: unknown) {
 		const job = this.jobs.get(id);
 		if (!job || err instanceof DiscardedError) return;
-		if (err instanceof AuthRequiredError) {
+		if (isSignInExpired(err)) {
 			this.authRequired = true;
 			await this.patch(id, { status: "queued", error: err.message });
 			return;
@@ -478,7 +482,7 @@ export class UploadQueue {
 			nextAttemptAt: retry
 				? this.now() + backoffDelay(attempts, this.random)
 				: null,
-			error: errorMessage(err),
+			error: err instanceof Error ? err.message : String(err),
 		});
 	}
 
@@ -531,7 +535,9 @@ export class UploadQueue {
 					};
 					await this.patch(job.id, { createItemRequest: request });
 				}
-				const item = await this.api.createItem(request.body, `item-${job.id}`);
+				const item = await this.api.items.create(request.body, {
+					idempotencyKey: `item-${job.id}`,
+				});
 				await this.patch(job.id, {
 					...ok,
 					itemId: item.id,
@@ -544,17 +550,18 @@ export class UploadQueue {
 					job.itemId ??
 					(job.parentJobId ? this.jobs.get(job.parentJobId)?.itemId : null) ??
 					undefined;
-				const { photo, uploadUrl, uploadHeaders } = await this.api.createPhoto(
-					{
-						itemId,
-						kind: job.kind,
-						contentType: job.contentType ?? "image/jpeg",
-						size: job.size ?? 0,
-					},
-					// Same key after an expired presigned URL too: the server replays
-					// the same photo with a freshly presigned PUT.
-					`photo-${job.id}`,
-				);
+				const { photo, uploadUrl, uploadHeaders } =
+					await this.api.photos.create(
+						{
+							itemId,
+							kind: job.kind,
+							contentType: job.contentType ?? "image/jpeg",
+							size: job.size ?? 0,
+						},
+						// Same key after an expired presigned URL too: the server replays
+						// the same photo with a freshly presigned PUT.
+						{ idempotencyKey: `photo-${job.id}` },
+					);
 				await this.patch(job.id, {
 					...ok,
 					itemId: itemId ?? null,
@@ -570,16 +577,13 @@ export class UploadQueue {
 					throw new Error("The photo is no longer stored on this device");
 				}
 				try {
-					await this.api.putObject(
+					await this.api.photos.put(
 						job.uploadUrl,
 						job.uploadHeaders ?? {},
 						blob,
 					);
 				} catch (err) {
-					if (
-						err instanceof HttpError &&
-						(err.status === 400 || err.status === 403)
-					) {
+					if (isApiError(err, 400) || isApiError(err, 403)) {
 						// The presigned URL expired (e.g. queued offline for hours):
 						// request a fresh photo upload on the next attempt.
 						await this.patch(job.id, {
@@ -596,11 +600,11 @@ export class UploadQueue {
 			}
 			case "complete": {
 				if (!job.photoId) throw new Error("No photo to complete");
-				let photo: Awaited<ReturnType<UploadApi["completePhoto"]>>;
+				let photo: Awaited<ReturnType<UploadApi["photos"]["complete"]>>;
 				try {
-					photo = await this.api.completePhoto(job.photoId);
+					photo = await this.api.photos.complete(job.photoId);
 				} catch (err) {
-					if (err instanceof HttpError && err.status === 422) {
+					if (isApiError(err, 422)) {
 						// The server cannot find the object: upload it again.
 						await this.patch(job.id, { uploaded: false });
 						throw new RetryableError(err.message);
@@ -613,7 +617,7 @@ export class UploadQueue {
 			case "updateItem": {
 				if (!job.itemId) throw new Error("No item to update");
 				const version = job.fieldsVersion;
-				await this.api.updateItem(job.itemId, {
+				await this.api.items.update(job.itemId, {
 					name: job.fields.name?.trim() || null,
 					categoryId: job.fields.categoryId ?? null,
 				});

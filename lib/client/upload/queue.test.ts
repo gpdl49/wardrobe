@@ -592,6 +592,28 @@ describe("UploadQueue", () => {
 		]);
 	});
 
+	it("pauses when oauth2-proxy redirects to sign-in", async () => {
+		backend.use((c) =>
+			c.url.startsWith("/api/")
+				? new Response(null, {
+						status: 302,
+						headers: { location: "/oauth2/sign_in" },
+					})
+				: undefined,
+		);
+		const { queue } = makeQueue();
+		await queue.start();
+		const job = await queue.enqueueCapture({
+			blob: photo(),
+			locationId: LOCATION,
+			sessionId: null,
+		});
+		await queue.whenIdle();
+		expect(queue.getSnapshot().authRequired).toBe(true);
+		expect(queue.get(job.id)).toMatchObject({ status: "queued", attempts: 0 });
+		expect(backend.find("POST", "/api/items")).toHaveLength(1);
+	});
+
 	it("kick() runs a backing-off job immediately (back online)", async () => {
 		let offline = true;
 		backend.use(() => {

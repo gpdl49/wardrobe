@@ -4,32 +4,40 @@ import { Check, Undo2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { LocationPicker } from "@/components/pack/location-picker";
-import type { ItemSummaryDto, LocationDto, LocationRef } from "@/lib/api/types";
-import { kindLabel } from "@/lib/client/location-codes";
+import { errorMessage } from "@/components/ui/feedback";
+import type {
+	ItemSummaryDto,
+	LocationDto,
+	LocationRef,
+	PackingSessionDto,
+	SessionMode,
+} from "@/lib/api/types";
 import {
-	endSession,
-	errorMessage,
-	getLocation,
-	HttpError,
-	moveItems,
-	startSession,
-} from "@/lib/client/pack-api";
+	type CreateOptions,
+	api as client,
+	isApiError,
+} from "@/lib/client/api";
+import { kindLabel } from "@/lib/client/location-codes";
 
 type LastMove = { items: ItemSummaryDto[]; to: LocationRef };
 
 /** Injectable for tests. */
 export type UnpackApi = {
-	getLocation: typeof getLocation;
-	moveItems: typeof moveItems;
-	startSession: typeof startSession;
-	endSession: typeof endSession;
+	getLocation: typeof client.locations.get;
+	moveItems: typeof client.items.move;
+	startSession: (
+		input: { mode: SessionMode; locationId: string },
+		options?: CreateOptions,
+	) => Promise<PackingSessionDto>;
+	endSession: typeof client.sessions.end;
 };
 
 const defaultApi: UnpackApi = {
-	getLocation,
-	moveItems,
-	startSession,
-	endSession,
+	getLocation: (id, signal) => client.locations.get(id, signal),
+	moveItems: (input) => client.items.move(input),
+	startSession: ({ mode, locationId }, options) =>
+		client.sessions.start(mode, locationId, options),
+	endSession: (id) => client.sessions.end(id),
 };
 
 type Props = {
@@ -53,6 +61,12 @@ export function UnpackFlow({ initialLocationId, api = defaultApi }: Props) {
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const sessionId = useRef<string | null>(null);
+	/**
+	 * Idempotency-Key for starting this unpacking session: kept until the
+	 * session exists, so a move retried after a failed start does not open a
+	 * second session; renewed when a new session is needed.
+	 */
+	const sessionKey = useRef<string | null>(null);
 
 	const open = async (id: string) => {
 		setError(null);
@@ -64,6 +78,7 @@ export function UnpackFlow({ initialLocationId, api = defaultApi }: Props) {
 			setSelected(new Set());
 			setLastMove(null);
 			sessionId.current = null;
+			sessionKey.current = null;
 		} catch (err) {
 			setError(errorMessage(err));
 		}
@@ -75,9 +90,14 @@ export function UnpackFlow({ initialLocationId, api = defaultApi }: Props) {
 	}, [initialLocationId]);
 
 	const ensureSession = async (locationId: string) => {
-		sessionId.current ??= (
-			await api.startSession({ mode: "unpack", locationId })
-		).id;
+		if (!sessionId.current) {
+			sessionKey.current ??= crypto.randomUUID();
+			const session = await api.startSession(
+				{ mode: "unpack", locationId },
+				{ idempotencyKey: sessionKey.current },
+			);
+			sessionId.current = session.id;
+		}
 		return sessionId.current;
 	};
 
@@ -98,9 +118,12 @@ export function UnpackFlow({ initialLocationId, api = defaultApi }: Props) {
 			setSelected(new Set());
 			setLastMove({ items: moving, to: destination });
 		} catch (err) {
-			// 409: the session was ended elsewhere; the next try starts a new one.
-			if (err instanceof HttpError && err.status === 409)
+			// 409: the session was ended elsewhere; the next try starts a new one
+			// (with a new key). Not for a start that is still in flight.
+			if (isApiError(err, 409) && err.error !== "idempotency_in_progress") {
 				sessionId.current = null;
+				sessionKey.current = null;
+			}
 			setError(errorMessage(err));
 		} finally {
 			setBusy(false);
@@ -135,6 +158,7 @@ export function UnpackFlow({ initialLocationId, api = defaultApi }: Props) {
 			await api.endSession(sessionId.current).catch(() => undefined);
 		}
 		sessionId.current = null;
+		sessionKey.current = null;
 		setSource(null);
 		setItems(null);
 		setLastMove(null);

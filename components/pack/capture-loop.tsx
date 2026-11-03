@@ -16,7 +16,7 @@ import type {
 	LocationRef,
 	PackingSessionDto,
 } from "@/lib/api/types";
-import { listCategories } from "@/lib/client/pack-api";
+import { api } from "@/lib/client/api";
 import { useQueueSnapshot, useUploadQueue } from "@/lib/client/upload";
 import type { UploadJob } from "@/lib/client/upload/types";
 import {
@@ -57,7 +57,8 @@ export function CaptureLoop({
 
 	useEffect(() => {
 		if (given) return;
-		listCategories()
+		api.categories
+			.list()
 			.then(setCategories)
 			.catch(() => undefined);
 	}, [given]);

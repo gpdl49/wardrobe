@@ -3,20 +3,15 @@
 import { Plus, QrCode, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { QrScanner } from "@/components/scan/qr-scanner";
+import { errorMessage } from "@/components/ui/feedback";
 import type { LocationDto, LocationKind } from "@/lib/api/types";
+import { api, isApiError } from "@/lib/client/api";
 import {
 	defaultName,
 	kindForCode,
 	kindLabel,
 	nextFreeCode,
 } from "@/lib/client/location-codes";
-import {
-	createLocation,
-	errorMessage,
-	getLocationByCode,
-	HttpError,
-	listLocations,
-} from "@/lib/client/pack-api";
 
 type Props = {
 	/** Offer new bags/suitcases with the next free code, and unknown scanned labels. */
@@ -47,7 +42,7 @@ export function LocationPicker({
 	const load = useCallback(async () => {
 		try {
 			// Archived ones too: their codes are taken.
-			const rows = await listLocations({ archived: true });
+			const rows = await api.locations.list({ archived: true });
 			setAll(rows);
 			return rows;
 		} catch (err) {
@@ -71,9 +66,9 @@ export function LocationPicker({
 			}
 			setBusy(true);
 			try {
-				onChoose(await getLocationByCode(code));
+				onChoose(await api.locations.getByCode(code));
 			} catch (err) {
-				if (err instanceof HttpError && err.status === 404) {
+				if (isApiError(err, 404)) {
 					setUnknownCode(code);
 				} else {
 					setError(errorMessage(err));
@@ -95,10 +90,14 @@ export function LocationPicker({
 		setError(null);
 		try {
 			onChoose(
-				await createLocation({ kind, code, name: defaultName(kind, code) }),
+				await api.locations.create({
+					kind,
+					code,
+					name: defaultName(kind, code),
+				}),
 			);
 		} catch (err) {
-			if (err instanceof HttpError && err.status === 409) {
+			if (isApiError(err, 409)) {
 				await load();
 				setError(`${code} was just taken; pick the new suggestion.`);
 			} else {

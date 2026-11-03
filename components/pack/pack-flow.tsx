@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { CaptureLoop, Preview } from "@/components/pack/capture-loop";
 import { LocationPicker } from "@/components/pack/location-picker";
+import { errorMessage } from "@/components/ui/feedback";
 import type { LocationDto, LocationRef } from "@/lib/api/types";
 import {
 	type ActiveSession,
@@ -12,18 +13,19 @@ import {
 	loadActiveSession,
 	saveActiveSession,
 } from "@/lib/client/active-session";
-import {
-	endSession,
-	errorMessage,
-	getLocation,
-	startSession,
-} from "@/lib/client/pack-api";
+import { api } from "@/lib/client/api";
 import { useQueueSnapshot, useUploadQueue } from "@/lib/client/upload";
 
 type Phase =
 	| { name: "loading" }
 	| { name: "choose"; error?: string }
-	| { name: "starting"; location: LocationRef; error?: string }
+	| {
+			name: "starting";
+			location: LocationRef;
+			/** Idempotency-Key of this start: "Try again" sends it again. */
+			key: string;
+			error?: string;
+	  }
 	| { name: "capture"; active: ActiveSession }
 	| { name: "summary"; active: ActiveSession; endError?: string };
 
@@ -46,20 +48,27 @@ export function PackFlow({ initialLocationId, initialCode }: Props) {
 	const [phase, setPhase] = useState<Phase>({ name: "loading" });
 	const router = useRouter();
 
-	const start = useCallback(async (location: LocationRef) => {
-		setPhase({ name: "starting", location });
-		try {
-			const session = await startSession({
-				mode: "pack",
-				locationId: location.id,
-			});
-			const active = { session, location: ref(location) };
-			saveActiveSession("pack", active);
-			setPhase({ name: "capture", active });
-		} catch (err) {
-			setPhase({ name: "starting", location, error: errorMessage(err) });
-		}
-	}, []);
+	/**
+	 * Starts a session in the location. One Idempotency-Key per choice of
+	 * location, reused by "Try again": if a lost response hid a session the
+	 * server did start, the retry gets that session back instead of a second.
+	 */
+	const start = useCallback(
+		async (location: LocationRef, key: string = crypto.randomUUID()) => {
+			setPhase({ name: "starting", location, key });
+			try {
+				const session = await api.sessions.start("pack", location.id, {
+					idempotencyKey: key,
+				});
+				const active = { session, location: ref(location) };
+				saveActiveSession("pack", active);
+				setPhase({ name: "capture", active });
+			} catch (err) {
+				setPhase({ name: "starting", location, key, error: errorMessage(err) });
+			}
+		},
+		[],
+	);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: decide the first phase once
 	useEffect(() => {
@@ -72,11 +81,12 @@ export function PackFlow({ initialLocationId, initialCode }: Props) {
 			setPhase({ name: "capture", active });
 			return;
 		}
-		getLocation(initialLocationId)
+		api.locations
+			.get(initialLocationId)
 			.then(async (location) => {
 				if (active) {
 					// Scanned a different bag: close the old session first.
-					await endSession(active.session.id).catch(() => undefined);
+					await api.sessions.end(active.session.id).catch(() => undefined);
 					clearActiveSession("pack");
 				}
 				await start(location);
@@ -87,7 +97,7 @@ export function PackFlow({ initialLocationId, initialCode }: Props) {
 	const end = async (active: ActiveSession) => {
 		clearActiveSession("pack");
 		try {
-			await endSession(active.session.id);
+			await api.sessions.end(active.session.id);
 			setPhase({ name: "summary", active });
 		} catch (err) {
 			setPhase({ name: "summary", active, endError: errorMessage(err) });
@@ -134,7 +144,7 @@ export function PackFlow({ initialLocationId, initialCode }: Props) {
 							<div className="flex gap-3">
 								<button
 									type="button"
-									onClick={() => void start(phase.location)}
+									onClick={() => void start(phase.location, phase.key)}
 									className="rounded-lg bg-brand px-4 py-2 font-medium text-white"
 								>
 									Try again

@@ -52,6 +52,47 @@ export function isApiError(err: unknown, status?: number): err is ApiError {
 	);
 }
 
+/**
+ * The request was turned away for want of a sign-in: a 401, or oauth2-proxy
+ * redirecting an expired session to sign-in (which the client reports as a
+ * 401). Reloading the page signs in again; retrying the request does not help.
+ */
+export function isSignInExpired(err: unknown): err is ApiError {
+	return isApiError(err, 401);
+}
+
+/**
+ * Worth retrying with the same request (and Idempotency-Key): network
+ * failures and timeouts (fetch rejects with a TypeError, or a DOMException
+ * when aborted), 408/425/429, 5xx, and a 409 `idempotency_in_progress` (an
+ * earlier attempt with the same key is still running on the server). Every
+ * other API error, including an expired sign-in, is permanent.
+ */
+export function isRetryable(err: unknown): boolean {
+	if (err instanceof ApiError) {
+		return (
+			err.status === 0 ||
+			(err.status === 409 && err.error === "idempotency_in_progress") ||
+			err.status === 408 ||
+			err.status === 425 ||
+			err.status === 429 ||
+			err.status >= 500
+		);
+	}
+	return (
+		err instanceof TypeError ||
+		(err instanceof DOMException &&
+			(err.name === "AbortError" || err.name === "TimeoutError"))
+	);
+}
+
+const SIGN_IN_EXPIRED =
+	"Your session has expired. Reload the page to sign in again.";
+
+function signInExpired(): ApiError {
+	return new ApiError(401, "unauthorized", SIGN_IN_EXPIRED);
+}
+
 /** Codes for responses without a contract body (proxy errors, crashes). */
 const FALLBACK_CODES: Record<number, string> = {
 	400: "bad_request",
@@ -172,7 +213,16 @@ export interface RequestOptions {
 	query?: Query;
 	body?: unknown;
 	signal?: AbortSignal;
+	/**
+	 * Sent as `Idempotency-Key` (POST /items, /photos and /sessions honour it).
+	 * A retry must send the same key and the same body: the server replays the
+	 * first response, and 422s (`idempotency_key_reused`) when the body differs.
+	 */
+	idempotencyKey?: string;
 }
+
+/** Per-call options of the create calls that honour `Idempotency-Key`. */
+export type CreateOptions = Pick<RequestOptions, "idempotencyKey" | "signal">;
 
 export function toQueryString(query: Query | undefined): string {
 	if (!query) {
@@ -196,6 +246,21 @@ export interface ApiClientOptions {
 	fetch?: typeof fetch;
 }
 
+/**
+ * oauth2-proxy answers a request with an expired session by redirecting to
+ * sign-in. API calls fetch with `redirect: "manual"`, so the browser hands
+ * back an opaque redirect (status 0) instead of chasing a cross-origin
+ * redirect to the identity provider (which fails like a network error);
+ * runtimes without opaque responses return the 3xx itself. A fetch that did
+ * follow the redirect ends on an HTML page, flagged `redirected`.
+ */
+function isSignInRedirect(response: Response): boolean {
+	return (
+		response.type === "opaqueredirect" ||
+		(response.status >= 300 && response.status < 400)
+	);
+}
+
 export function createApiClient(options: ApiClientOptions = {}) {
 	const baseUrl = options.baseUrl ?? "/api";
 	const doFetch: typeof fetch = (...args) =>
@@ -204,11 +269,14 @@ export function createApiClient(options: ApiClientOptions = {}) {
 	async function request<T>(
 		method: string,
 		path: string,
-		{ query, body, signal }: RequestOptions = {},
+		{ query, body, signal, idempotencyKey }: RequestOptions = {},
 	): Promise<T> {
 		const headers: Record<string, string> = { Accept: "application/json" };
 		if (body !== undefined) {
 			headers["Content-Type"] = "application/json";
+		}
+		if (idempotencyKey !== undefined) {
+			headers["Idempotency-Key"] = idempotencyKey;
 		}
 		const response = await doFetch(`${baseUrl}${path}${toQueryString(query)}`, {
 			method,
@@ -216,7 +284,11 @@ export function createApiClient(options: ApiClientOptions = {}) {
 			body: body === undefined ? undefined : JSON.stringify(body),
 			signal,
 			credentials: "same-origin",
+			redirect: "manual",
 		});
+		if (isSignInRedirect(response)) {
+			throw signInExpired();
+		}
 		if (!response.ok) {
 			throw await toApiError(response);
 		}
@@ -225,16 +297,43 @@ export function createApiClient(options: ApiClientOptions = {}) {
 		}
 		const type = response.headers.get("content-type") ?? "";
 		if (!type.includes("json")) {
-			// Most likely oauth2-proxy's sign-in page after the session expired.
+			if (response.redirected) {
+				// oauth2-proxy's sign-in page, reached by following its redirect.
+				throw signInExpired();
+			}
 			throw new ApiError(
-				response.redirected ? 401 : response.status,
-				response.redirected ? "unauthorized" : "bad_response",
-				response.redirected
-					? "Your session has expired. Reload the page to sign in again."
-					: `Unexpected ${type || "empty"} response from ${path}`,
+				response.status,
+				"bad_response",
+				`Unexpected ${type || "empty"} response from ${path}`,
 			);
 		}
 		return (await response.json()) as T;
+	}
+
+	/**
+	 * PUT bytes to a presigned S3 URL (from POST /photos) with exactly its
+	 * `uploadHeaders`. Cross-origin, so no cookies; a failure is an ApiError
+	 * `upload_failed` with S3's status (400/403 once the URL has expired).
+	 */
+	async function putObject(
+		uploadUrl: string,
+		uploadHeaders: Record<string, string>,
+		file: Blob,
+		signal?: AbortSignal,
+	): Promise<void> {
+		const response = await doFetch(uploadUrl, {
+			method: "PUT",
+			headers: uploadHeaders,
+			body: file,
+			signal,
+		});
+		if (!response.ok) {
+			throw new ApiError(
+				response.status,
+				"upload_failed",
+				`Uploading the photo failed (${response.status})`,
+			);
+		}
 	}
 
 	const enc = encodeURIComponent;
@@ -299,8 +398,11 @@ export function createApiClient(options: ApiClientOptions = {}) {
 				}),
 			get: (id: string, signal?: AbortSignal) =>
 				request<ItemDetailDto>("GET", `/items/${enc(id)}`, { signal }),
-			create: (input: ItemInput) =>
-				request<ItemSummaryDto>("POST", "/items", { body: input }),
+			create: (input: ItemInput, options: CreateOptions = {}) =>
+				request<ItemSummaryDto>("POST", "/items", {
+					...options,
+					body: input,
+				}),
 			update: (id: string, input: ItemInput) =>
 				request<ItemSummaryDto>("PATCH", `/items/${enc(id)}`, {
 					body: input,
@@ -343,8 +445,13 @@ export function createApiClient(options: ApiClientOptions = {}) {
 			 */
 			url: (photo: Pick<PhotoDto, "id">, variant: PhotoVariant) =>
 				`${baseUrl}/photos/${enc(photo.id)}/${variant}`,
-			create: (input: CreatePhotoInput) =>
-				request<PhotoUploadDto>("POST", "/photos", { body: input }),
+			create: (input: CreatePhotoInput, options: CreateOptions = {}) =>
+				request<PhotoUploadDto>("POST", "/photos", {
+					...options,
+					body: input,
+				}),
+			/** PUT the bytes to the presigned URL returned by `create`. */
+			put: putObject,
 			complete: (id: string) =>
 				request<PhotoDto>("POST", `/photos/${enc(id)}/complete`),
 			/** Assign a photo to an item (or unassign with null) or change its kind. */
@@ -369,18 +476,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
 							size: file.size,
 						},
 					});
-				const put = await doFetch(uploadUrl, {
-					method: "PUT",
-					headers: uploadHeaders,
-					body: file,
-				});
-				if (!put.ok) {
-					throw new ApiError(
-						put.status,
-						"upload_failed",
-						`Uploading the photo failed (${put.status})`,
-					);
-				}
+				await putObject(uploadUrl, uploadHeaders, file);
 				return request<PhotoDto>("POST", `/photos/${enc(photo.id)}/complete`);
 			},
 		},
@@ -390,8 +486,13 @@ export function createApiClient(options: ApiClientOptions = {}) {
 				request<PackingSessionDetailDto>("GET", `/sessions/${enc(id)}`, {
 					signal,
 				}),
-			start: (mode: SessionMode, locationId: string) =>
+			start: (
+				mode: SessionMode,
+				locationId: string,
+				options: CreateOptions = {},
+			) =>
 				request<PackingSessionDto>("POST", "/sessions", {
+					...options,
 					body: { mode, locationId },
 				}),
 			end: (id: string) =>
