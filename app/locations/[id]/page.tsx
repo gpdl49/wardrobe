@@ -1,15 +1,11 @@
-import { PageHeader, Placeholder } from "@/components/page-header";
+import type { Metadata } from "next";
+import { LocationDetail } from "@/components/locations/location-detail";
+
+export const metadata: Metadata = { title: "Location" };
 
 export default async function LocationPage({
 	params,
 }: PageProps<"/locations/[id]">) {
 	const { id } = await params;
-	return (
-		<>
-			<PageHeader title="Location" />
-			<Placeholder>
-				Contents of location <code>{id}</code> (printable) are not built yet.
-			</Placeholder>
-		</>
-	);
+	return <LocationDetail id={id} />;
 }
