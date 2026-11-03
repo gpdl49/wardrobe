@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { PageHeader, Placeholder } from "@/components/page-header";
+import { CategoryTreeEditor } from "@/components/admin/category-tree-editor";
+import { PageHeader } from "@/components/page-header";
 
 export const metadata: Metadata = { title: "Categories" };
 
@@ -7,7 +8,9 @@ export default function Page() {
 	return (
 		<>
 			<PageHeader title="Categories" />
-			<Placeholder>Edit the category tree.</Placeholder>
+			<div className="max-w-3xl">
+				<CategoryTreeEditor />
+			</div>
 		</>
 	);
 }
