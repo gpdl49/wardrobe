@@ -59,7 +59,7 @@ describe("SuggestionsPanel", () => {
 				1,
 			),
 		);
-		await user.click(screen.getByRole("button", { name: /Accept all \(3\)/ }));
+		await user.click(screen.getByRole("button", { name: /Accept all \(4\)/ }));
 		await waitFor(() =>
 			expect(requests(fetch).filter((r) => r.method === "POST")).toHaveLength(
 				2,
@@ -71,7 +71,7 @@ describe("SuggestionsPanel", () => {
 			body: { fields: ["material"] },
 		});
 		expect(posts[1]?.body).toEqual({
-			fields: ["categorySlug", "material", "seasons"],
+			fields: ["categorySlug", "material", "seasons", "labelText"],
 		});
 	});
 

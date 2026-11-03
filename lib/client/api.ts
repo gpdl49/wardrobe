@@ -151,8 +151,11 @@ export interface CreatePhotoInput {
 	size: number;
 }
 
-/** Item fields an analysis can fill (keys of ItemSuggestion except labelText). */
-export type SuggestionField = Exclude<keyof ItemSuggestion, "labelText">;
+/**
+ * Fields of an analysis that can be applied. Tags are added to the item's,
+ * label text is appended to its notes, the rest replace the item's value.
+ */
+export type SuggestionField = keyof ItemSuggestion;
 
 export interface RerunAnalysisInput {
 	/** Defaults to every kind the server can run. */

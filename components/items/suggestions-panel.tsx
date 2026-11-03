@@ -34,6 +34,7 @@ export const SUGGESTION_FIELDS: Array<[SuggestionField, string]> = [
 	["material", "Material"],
 	["seasons", "Seasons"],
 	["tags", "Tags"],
+	["labelText", "Label"],
 ];
 
 const sameSet = (a: string[], b: string[]) =>
@@ -58,6 +59,10 @@ export function matchesItem(
 		case "tags":
 			return (suggestion.tags ?? []).every((t) =>
 				item.tags.includes(t.toLowerCase()),
+			);
+		case "labelText":
+			return Boolean(
+				suggestion.labelText && item.notes?.includes(suggestion.labelText),
 			);
 		default:
 			return (
@@ -180,6 +185,8 @@ function AnalysisCard({
 				return (result.seasons ?? []).map((s) => SEASON_LABELS[s]).join(", ");
 			case "tags":
 				return (result.tags ?? []).join(", ");
+			case "labelText":
+				return <span className="whitespace-pre-wrap">{result.labelText}</span>;
 			default:
 				return result[field];
 		}
@@ -247,12 +254,6 @@ function AnalysisCard({
 						);
 					})}
 				</dl>
-			) : null}
-			{result?.labelText ? (
-				<div className="rounded-lg bg-sunken px-3 py-2 text-sm">
-					<span className="text-xs font-medium text-muted">Label text</span>
-					<p className="whitespace-pre-wrap">{result.labelText}</p>
-				</div>
 			) : null}
 			<ErrorText error={apply.error} />
 			{open.length > 1 ? (

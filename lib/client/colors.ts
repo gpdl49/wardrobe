@@ -1,27 +1,11 @@
+import { PALETTE } from "@/lib/analyses/palette";
+
 /**
- * Colour swatches for the catalogue filter. The names are what the colour
- * analysis writes into `Item.colors[].name` and what `GET /api/items?color=`
- * matches; the hex values are only for drawing the swatch.
+ * Colour swatches for the catalogue filter: the colour analysis palette, so
+ * the names are exactly what `Item.colors[].name` holds and what
+ * `GET /api/items?color=` matches.
  */
-export const COLOR_SWATCHES = [
-	{ name: "black", hex: "#111111" },
-	{ name: "grey", hex: "#8a8a8a" },
-	{ name: "white", hex: "#f5f5f5" },
-	{ name: "cream", hex: "#efe6d2" },
-	{ name: "beige", hex: "#d6c3a0" },
-	{ name: "brown", hex: "#6f4a2f" },
-	{ name: "navy", hex: "#1f2a4a" },
-	{ name: "blue", hex: "#2f6ad9" },
-	{ name: "teal", hex: "#1f8a8a" },
-	{ name: "green", hex: "#3d8a4a" },
-	{ name: "olive", hex: "#6b6b2f" },
-	{ name: "yellow", hex: "#e8c531" },
-	{ name: "orange", hex: "#e2792f" },
-	{ name: "red", hex: "#c8312f" },
-	{ name: "burgundy", hex: "#6e1f2f" },
-	{ name: "pink", hex: "#e8a0b8" },
-	{ name: "purple", hex: "#6e3fa0" },
-] as const;
+export const COLOR_SWATCHES = PALETTE;
 
 export function swatchHex(name: string): string | undefined {
 	return COLOR_SWATCHES.find((s) => s.name === name)?.hex;
