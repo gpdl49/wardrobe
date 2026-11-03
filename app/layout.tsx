@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { BottomNav, MobileMenu, TopNav } from "@/components/nav";
+import { UploadQueueResumer } from "@/lib/client/upload";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -45,6 +46,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 					{children}
 				</main>
 				<BottomNav />
+				{/* Pending photo uploads resume on every page. */}
+				<UploadQueueResumer />
 			</body>
 		</html>
 	);
