@@ -183,3 +183,9 @@ export interface MeDto {
 	username: string | null;
 	groups: string[];
 }
+
+/** GET /api/sessions/{id}: the session and the items moved in it. */
+export interface PackingSessionDetailDto extends PackingSessionDto {
+	location: LocationRef;
+	items: ItemSummaryDto[];
+}

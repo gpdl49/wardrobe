@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { conflict, notFound, unprocessable } from "@/lib/http/errors";
+import { itemSummaryInclude, toItemSummaryDto } from "@/lib/items/present";
 import type {
 	CreateLocationInput,
 	ListLocationsQuery,
@@ -60,14 +61,22 @@ export async function getLocation(id: string) {
 		where: { id: parseId(id) },
 		include: {
 			...withItemCount,
-			items: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
-			children: { orderBy: { code: "asc" } },
+			items: {
+				include: itemSummaryInclude,
+				orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+			},
+			children: { include: withItemCount, orderBy: { code: "asc" } },
 		},
 	});
 	if (!location) {
 		throw notFound("Location not found");
 	}
-	return present(location);
+	const { items, children, ...rest } = location;
+	return {
+		...present(rest),
+		items: items.map(toItemSummaryDto),
+		children: children.map(present),
+	};
 }
 
 export async function getLocationByCode(code: string) {
