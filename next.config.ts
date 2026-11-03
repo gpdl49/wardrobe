@@ -9,10 +9,10 @@ const isDev = process.env.NODE_ENV === "development";
  */
 const CSP = [
 	"default-src 'self'",
-	`script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+	// 'wasm-unsafe-eval': zxing-wasm (QR scanning) compiles WebAssembly.
+	`script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'${isDev ? " 'unsafe-eval'" : ""}`,
 	"style-src 'self' 'unsafe-inline'",
 	`img-src 'self' data: blob: https:${isDev ? " http://localhost:*" : ""}`,
-	// zxing-wasm (QR scanning) compiles WebAssembly in the page.
 	"worker-src 'self' blob:",
 	`connect-src 'self' https:${isDev ? " http://localhost:* ws://localhost:*" : ""}`,
 	"font-src 'self' data:",
