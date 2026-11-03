@@ -1,13 +1,18 @@
 import type { Metadata } from "next";
-import { PageHeader, Placeholder } from "@/components/page-header";
+import { PageHeader } from "@/components/page-header";
+import { UnpackFlow } from "@/components/unpack/unpack-flow";
 
 export const metadata: Metadata = { title: "Unpack" };
 
-export default function Page() {
+/** ?location=<id> opens that location straight away. */
+export default async function Page({ searchParams }: PageProps<"/unpack">) {
+	const { location } = await searchParams;
 	return (
 		<>
 			<PageHeader title="Unpack" />
-			<Placeholder>Scan a location and take items out of it.</Placeholder>
+			<UnpackFlow
+				initialLocationId={typeof location === "string" ? location : undefined}
+			/>
 		</>
 	);
 }
