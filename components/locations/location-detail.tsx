@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/feedback";
 import { Field, Select } from "@/components/ui/field";
 import type { LocationDetailDto } from "@/lib/api/types";
+import { canRestructure } from "@/lib/client/access";
 import { isApiError } from "@/lib/client/api";
 import {
 	formatDate,
@@ -38,6 +39,7 @@ import {
 	useLocation,
 	useLocations,
 	useMoveItems,
+	useSharedWithMe,
 } from "@/lib/client/queries";
 import { LocationDialog } from "./location-dialog";
 import { KIND_ICONS } from "./locations-list";
@@ -62,7 +64,10 @@ export function LocationDetail({ id }: { id: string }) {
 
 function LocationView({ location }: { location: LocationDetailDto }) {
 	const router = useRouter();
-	const all = useLocations({ archived: true });
+	const all = useLocations({ archived: true, owner: location.ownerId });
+	const shared = useSharedWithMe();
+	const canEdit = location.access !== "view";
+	const restructurable = canRestructure(location, shared.data ?? []);
 	const remove = useDeleteLocation();
 	const parent = all.data?.find((l) => l.id === location.parentId);
 	const Icon = KIND_ICONS[location.kind];
@@ -112,47 +117,55 @@ function LocationView({ location }: { location: LocationDetailDto }) {
 				</div>
 
 				<div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
-					<MoveAllDialog location={location} />
+					{canEdit ? <MoveAllDialog location={location} /> : null}
 					<Button onClick={() => window.print()}>
 						<Printer />
 						Print contents
 					</Button>
-					<LocationDialog
-						location={location}
-						trigger={
-							<Button>
-								<Pencil />
-								Edit
-							</Button>
-						}
-					/>
-					<LocationDialog
-						defaultParentId={location.id}
-						trigger={
-							<Button>
-								<Plus />
-								Add inside
-							</Button>
-						}
-					/>
-					<ConfirmDialog
-						title={`Delete ${location.code}?`}
-						description={
-							location.itemCount > 0
-								? "It still holds items: move them out first."
-								: "The location is deleted. Its label will stop working."
-						}
-						onConfirm={async () => {
-							await remove.mutateAsync(location.id);
-							router.replace("/locations");
-						}}
-						trigger={
-							<Button variant="danger-ghost">
-								<Trash2 />
-								Delete
-							</Button>
-						}
-					/>
+					{canEdit ? (
+						<>
+							<LocationDialog
+								location={location}
+								lockParent={!restructurable}
+								trigger={
+									<Button>
+										<Pencil />
+										Edit
+									</Button>
+								}
+							/>
+							<LocationDialog
+								ownerId={location.ownerId}
+								defaultParentId={location.id}
+								trigger={
+									<Button>
+										<Plus />
+										Add inside
+									</Button>
+								}
+							/>
+						</>
+					) : null}
+					{canEdit && restructurable ? (
+						<ConfirmDialog
+							title={`Delete ${location.code}?`}
+							description={
+								location.itemCount > 0
+									? "It still holds items: move them out first."
+									: "The location is deleted. Its label will stop working."
+							}
+							onConfirm={async () => {
+								await remove.mutateAsync(location.id);
+								router.replace("/locations");
+							}}
+							trigger={
+								<Button variant="danger-ghost">
+									<Trash2 />
+									Delete
+								</Button>
+							}
+						/>
+					) : null}
 				</div>
 
 				{location.children.length > 0 ? (
@@ -310,7 +323,7 @@ function MoveAllDialog({ location }: { location: LocationDetailDto }) {
 	const id = useId();
 	const [open, setOpen] = useState(false);
 	const [target, setTarget] = useState("");
-	const locations = useLocations();
+	const locations = useLocations({ owner: location.ownerId });
 	const move = useMoveItems();
 	const count = location.items.length;
 	return (

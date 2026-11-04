@@ -7,6 +7,8 @@ export function itemDetail(
 ): ItemDetailDto {
 	return {
 		id: "item-1",
+		ownerId: "user-1",
+		access: "owner",
 		name: "Navy coat",
 		category: null,
 		brand: null,
@@ -49,6 +51,8 @@ export function analysis(overrides: Partial<AnalysisDto> = {}): AnalysisDto {
 export function location(overrides: Partial<LocationDto> = {}): LocationDto {
 	return {
 		id: "loc-1",
+		ownerId: "user-1",
+		access: "owner",
 		kind: "bag",
 		code: "B-01",
 		name: "Winter bag",

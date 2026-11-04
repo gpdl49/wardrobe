@@ -1,3 +1,8 @@
+import {
+	type AccessContext,
+	accessToItem,
+	accessToLocation,
+} from "@/lib/access";
 import { toAnalysisDto } from "@/lib/analyses/present";
 import type {
 	CategoryRef,
@@ -14,7 +19,10 @@ import { toPhotoDto } from "@/lib/photos/present";
  * Item serialisation (lib/api/types.ts). Query with these includes and pass
  * the rows to the presenters:
  *
- *   db().item.findMany({ include: itemSummaryInclude }).then(r => r.map(toItemSummaryDto))
+ *   db().item.findMany({ include: itemSummaryInclude })
+ *     .then(rows => rows.map(r => toItemSummaryDto(r, ctx)))
+ *
+ * Only pass rows the caller may read: a row they cannot access throws.
  */
 
 export const locationRefSelect = {
@@ -98,9 +106,18 @@ export function parseColors(value: unknown): ItemColor[] {
 	});
 }
 
-export function toItemSummaryDto(item: ItemSummaryRow): ItemSummaryDto {
+export function toItemSummaryDto(
+	item: ItemSummaryRow,
+	ctx: AccessContext,
+): ItemSummaryDto {
+	const access = accessToItem(ctx, item);
+	if (!access) {
+		throw new Error(`Item ${item.id} is not readable by ${ctx.viewerId}`);
+	}
 	return {
 		id: item.id,
+		ownerId: item.ownerId,
+		access,
 		name: item.name,
 		category: item.category ? toCategoryRef(item.category) : null,
 		brand: item.brand,
@@ -113,27 +130,46 @@ export function toItemSummaryDto(item: ItemSummaryRow): ItemSummaryDto {
 		location: item.location ? toLocationRef(item.location) : null,
 		notes: item.notes,
 		tags: item.tags.map((t) => t.tag.name).sort(),
-		coverPhoto: item.coverPhoto ? toPhotoDto(item.coverPhoto) : null,
+		coverPhoto: item.coverPhoto ? toPhotoDto(item.coverPhoto, access) : null,
 		createdAt: item.createdAt.toISOString(),
 		updatedAt: item.updatedAt.toISOString(),
 	};
 }
 
-export function toMovementDto(movement: MovementRow): MovementDto {
+/**
+ * An item can reach someone through a location share after moving there from
+ * a location they cannot read. Those references are redacted to null. Movements
+ * stay within one owner, so the item's owner is the location's.
+ */
+export function toMovementDto(
+	movement: MovementRow,
+	ownerId: string,
+	ctx: AccessContext,
+): MovementDto {
+	const ref = (location: MovementRow["fromLocation"]) =>
+		location && accessToLocation(ctx, { id: location.id, ownerId })
+			? toLocationRef(location)
+			: null;
 	return {
 		id: movement.id,
-		from: movement.fromLocation ? toLocationRef(movement.fromLocation) : null,
-		to: movement.toLocation ? toLocationRef(movement.toLocation) : null,
+		from: ref(movement.fromLocation),
+		to: ref(movement.toLocation),
 		sessionId: movement.sessionId,
 		at: movement.at.toISOString(),
 	};
 }
 
-export function toItemDetailDto(item: ItemDetailRow): ItemDetailDto {
+export function toItemDetailDto(
+	item: ItemDetailRow,
+	ctx: AccessContext,
+): ItemDetailDto {
+	const summary = toItemSummaryDto(item, ctx);
 	return {
-		...toItemSummaryDto(item),
-		photos: item.photos.map(toPhotoDto),
-		movements: item.movements.map(toMovementDto),
+		...summary,
+		photos: item.photos.map((photo) => toPhotoDto(photo, summary.access)),
+		movements: item.movements.map((movement) =>
+			toMovementDto(movement, item.ownerId, ctx),
+		),
 		analyses: item.analyses.map(toAnalysisDto),
 	};
 }

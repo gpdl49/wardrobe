@@ -8,11 +8,12 @@ import {
 	useQueryClient,
 } from "@tanstack/react-query";
 import { useMemo } from "react";
-import type { ItemDetailDto } from "@/lib/api/types";
+import type { ItemDetailDto, ShareAccess } from "@/lib/api/types";
 import {
 	api,
 	type CreateCategoryInput,
 	type CreateLocationInput,
+	type CreateShareInput,
 	type ItemInput,
 	type ItemsQuery,
 	type LocationsQuery,
@@ -32,12 +33,21 @@ export const queryKeys = {
 	locations: (query: LocationsQuery = {}) => ["locations", query] as const,
 	location: (id: string) => ["location", id] as const,
 	categories: ["categories"] as const,
-	tags: ["tags"] as const,
+	tags: (owner?: string) => ["tags", owner ?? null] as const,
+	shares: ["shares"] as const,
+	sharedWithMe: ["shared-with-me"] as const,
 	items: (query: ItemsQuery = {}) => ["items", query] as const,
 	item: (id: string) => ["item", id] as const,
 };
 
 export const ITEMS_PAGE_SIZE = 48;
+
+export function useMe() {
+	return useQuery({
+		queryKey: queryKeys.me,
+		queryFn: () => api.me(),
+	});
+}
 
 export function useLocations(query: LocationsQuery = {}) {
 	return useQuery({
@@ -67,10 +77,10 @@ export function useCategories() {
 	return { ...query, tree, flat };
 }
 
-export function useTags() {
+export function useTags(owner?: string) {
 	return useQuery({
-		queryKey: queryKeys.tags,
-		queryFn: ({ signal }) => api.tags.list(signal),
+		queryKey: queryKeys.tags(owner),
+		queryFn: ({ signal }) => api.tags.list({ owner }, signal),
 		staleTime: 60_000,
 	});
 }
@@ -107,7 +117,7 @@ export function invalidateItems(client: QueryClient, itemId?: string) {
 	void client.invalidateQueries({ queryKey: ["items"] });
 	void client.invalidateQueries({ queryKey: ["locations"] });
 	void client.invalidateQueries({ queryKey: ["location"] });
-	void client.invalidateQueries({ queryKey: queryKeys.tags });
+	void client.invalidateQueries({ queryKey: ["tags"] });
 	if (itemId) {
 		void client.invalidateQueries({ queryKey: queryKeys.item(itemId) });
 	}
@@ -224,6 +234,41 @@ export function useCategoryMutations() {
 		}),
 		remove: useMutation({
 			mutationFn: (id: string) => api.categories.delete(id),
+			onSuccess,
+		}),
+	};
+}
+
+export function useShares() {
+	return useQuery({
+		queryKey: queryKeys.shares,
+		queryFn: ({ signal }) => api.shares.list(signal),
+	});
+}
+
+export function useSharedWithMe() {
+	return useQuery({
+		queryKey: queryKeys.sharedWithMe,
+		queryFn: ({ signal }) => api.shares.sharedWithMe(signal),
+	});
+}
+
+export function useShareMutations() {
+	const client = useQueryClient();
+	const onSuccess = () =>
+		client.invalidateQueries({ queryKey: queryKeys.shares });
+	return {
+		create: useMutation({
+			mutationFn: (input: CreateShareInput) => api.shares.create(input),
+			onSuccess,
+		}),
+		update: useMutation({
+			mutationFn: ({ id, access }: { id: string; access: ShareAccess }) =>
+				api.shares.update(id, access),
+			onSuccess,
+		}),
+		remove: useMutation({
+			mutationFn: (id: string) => api.shares.delete(id),
 			onSuccess,
 		}),
 	};

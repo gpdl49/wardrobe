@@ -15,14 +15,13 @@ import { describeWithDb, resetDb } from "@/test/helpers/db";
 import { makeItem, makeLocation } from "@/test/helpers/fixtures";
 import { apiRequest, json, TEST_USER } from "@/test/helpers/http";
 import { type FakeS3, installFakeS3 } from "@/test/helpers/s3";
+import { OTHER_USER, share, userId } from "@/test/helpers/users";
 
 vi.mock("@/lib/jobs/queue", () => ({
 	enqueue: vi.fn(async () => "job-1"),
 	getBoss: vi.fn(),
 	stopBoss: vi.fn(),
 }));
-
-const OTHER_USER: User = { ...TEST_USER, sub: "other-sub" };
 
 type PostOptions = { key?: string; user?: User };
 
@@ -142,9 +141,12 @@ describeWithDb("Idempotency-Key", () => {
 		});
 
 		it("scopes keys per user", async () => {
+			const theirLocation = await makeLocation({
+				ownerId: await userId(OTHER_USER),
+			});
 			const mine = await createItem({ locationId }, { key: "shared" });
 			const theirs = await createItem(
-				{ locationId },
+				{ locationId: theirLocation.id },
 				{ key: "shared", user: OTHER_USER },
 			);
 			expect(mine.status).toBe(201);
@@ -355,6 +357,26 @@ describeWithDb("Idempotency-Key", () => {
 			const second = await json<PhotoUploadDto>(await createPhoto(body, "p"));
 			expect(second).toEqual(first);
 		});
+
+		it("refuses the replay once the caller's access is revoked", async () => {
+			const ownerId = await userId(OTHER_USER);
+			const location = await makeLocation({ ownerId });
+			const item = await makeItem({ ownerId, locationId: location.id });
+			const grant = await share(OTHER_USER, TEST_USER, "edit", location.id);
+			const body = {
+				itemId: item.id,
+				kind: "main",
+				contentType: "image/jpeg",
+				size: 1234,
+			};
+			const first = await createPhoto(body, "revoked");
+			expect(first.status).toBe(201);
+
+			await db().share.delete({ where: { id: grant.id } });
+			const replay = await createPhoto(body, "revoked");
+			expect(replay.status).toBe(404);
+			expect(await json(replay)).not.toHaveProperty("uploadUrl");
+		});
 	});
 
 	describe("POST /api/sessions", () => {
@@ -375,11 +397,16 @@ describeWithDb("Idempotency-Key", () => {
 	});
 });
 
-describe("withIdempotency without a key", () => {
-	it("calls the handler directly (no database)", async () => {
+describeWithDb("withIdempotency without a key", () => {
+	beforeEach(async () => {
+		await resetDb();
+	});
+
+	it("calls the handler directly and stores nothing", async () => {
 		const response = await withAuth(
 			withIdempotency(async () => Response.json({ ok: true }, { status: 201 })),
 		)(apiRequest("/api/test", { method: "POST", body: {} }), {});
 		expect(response.status).toBe(201);
+		expect(await keyRows()).toEqual([]);
 	});
 });

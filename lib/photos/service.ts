@@ -1,6 +1,21 @@
+import {
+	type AccessContext,
+	accessToItem,
+	accessToPhoto,
+	accessToWardrobe,
+	loadAccess,
+	requireEdit,
+	requireRead,
+} from "@/lib/access";
 import type { PhotoDto, PhotoUploadDto } from "@/lib/api/types";
+import type { Viewer } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { ApiError, notFound, unprocessable } from "@/lib/http/errors";
+import {
+	ApiError,
+	forbidden,
+	notFound,
+	unprocessable,
+} from "@/lib/http/errors";
 import { photoRenditions } from "@/lib/jobs/definitions/photo-renditions";
 import { enqueue } from "@/lib/jobs/queue";
 import { ensureCover } from "@/lib/photos/cover";
@@ -24,7 +39,8 @@ import {
 
 /**
  * Photos: presigned upload, completion, rendition redirects, assignment and
- * deletion. Throws ApiErrors; never returns them.
+ * deletion. Throws ApiErrors; never returns them. Access follows the item; an
+ * unassigned photo belongs to its uploader until it is assigned.
  */
 
 /** Presigned GETs outlive the redirect's `max-age=300` cache. */
@@ -39,25 +55,38 @@ function parseId(id: string): string {
 	return parsed.data;
 }
 
-async function findPhoto(id: string) {
-	const photo = await db().photo.findUnique({ where: { id: parseId(id) } });
+const withItemAccess = {
+	item: { select: { ownerId: true, locationId: true } },
+} as const;
+
+/** The photo and the caller's access to it; 404 without access. */
+async function findPhoto(ctx: AccessContext, id: string) {
+	const photo = await db().photo.findUnique({
+		where: { id: parseId(id) },
+		include: withItemAccess,
+	});
 	if (!photo) {
 		throw notFound("Photo not found");
 	}
-	return photo;
+	const access = requireRead(accessToPhoto(ctx, photo), "Photo");
+	return { photo, access };
 }
 
-async function assertItemExists(itemId: string) {
+/** An item the caller may add photos to: 404 without access, 403 view-only. */
+async function findEditableItem(ctx: AccessContext, itemId: string) {
 	const item = await db().item.findUnique({
 		where: { id: itemId },
-		select: { id: true },
+		select: { ownerId: true, locationId: true },
 	});
 	if (!item) {
 		throw notFound("Item not found");
 	}
+	requireEdit(accessToItem(ctx, item), "Item");
+	return item;
 }
 
 export async function createPhotoUpload(
+	viewer: Viewer,
 	input: CreatePhotoInput,
 ): Promise<PhotoUploadDto> {
 	if (UNSUPPORTED_CONTENT_TYPES.has(input.contentType)) {
@@ -67,11 +96,13 @@ export async function createPhotoUpload(
 			"unsupported_format",
 		);
 	}
-	if (input.itemId) {
-		await assertItemExists(input.itemId);
-	}
+	const ctx = await loadAccess(viewer);
+	const item = input.itemId ? await findEditableItem(ctx, input.itemId) : null;
+	const ownerId = item?.ownerId ?? viewer.id;
+	const access = requireEdit(accessToPhoto(ctx, { ownerId, item }), "Photo");
 	const photo = await db().photo.create({
 		data: {
+			ownerId,
 			itemId: input.itemId ?? null,
 			kind: input.kind,
 			contentType: input.contentType,
@@ -83,7 +114,7 @@ export async function createPhotoUpload(
 		photo.contentType,
 	);
 	return {
-		photo: toPhotoDto(photo),
+		photo: toPhotoDto(photo, access),
 		uploadUrl: put.url,
 		uploadHeaders: put.headers,
 	};
@@ -93,13 +124,23 @@ export async function createPhotoUpload(
  * An Idempotency-Key replay of POST /api/photos: the stored presigned URL may
  * have expired (the queue re-POSTs with the same key exactly when its PUT got
  * a 400/403), so a photo still pending gets a fresh one. Anything else is
- * replayed as stored.
+ * replayed as stored. Access is checked again: a caller whose share was
+ * revoked since must not get a new upload URL, or the stored one back.
  */
 export async function refreshPhotoUpload(
+	viewer: Viewer,
 	stored: PhotoUploadDto,
 ): Promise<PhotoUploadDto> {
-	const photo = await db().photo.findUnique({ where: { id: stored.photo.id } });
-	if (photo?.status !== "pending") {
+	const photo = await db().photo.findUnique({
+		where: { id: stored.photo.id },
+		include: withItemAccess,
+	});
+	if (!photo) {
+		return stored;
+	}
+	const ctx = await loadAccess(viewer);
+	const access = requireEdit(accessToPhoto(ctx, photo), "Photo");
+	if (photo.status !== "pending") {
 		return stored;
 	}
 	const put = await presignPut(
@@ -107,7 +148,7 @@ export async function refreshPhotoUpload(
 		photo.contentType,
 	);
 	return {
-		photo: toPhotoDto(photo),
+		photo: toPhotoDto(photo, access),
 		uploadUrl: put.url,
 		uploadHeaders: put.headers,
 	};
@@ -117,10 +158,15 @@ export async function refreshPhotoUpload(
  * Checks the original arrived and queues the renditions. Idempotent: a photo
  * already processing or ready is returned as is; a failed one is retried.
  */
-export async function completePhoto(id: string): Promise<PhotoDto> {
-	const photo = await findPhoto(id);
+export async function completePhoto(
+	viewer: Viewer,
+	id: string,
+): Promise<PhotoDto> {
+	const ctx = await loadAccess(viewer);
+	const { photo, access } = await findPhoto(ctx, id);
+	requireEdit(access, "Photo");
 	if (photo.status === "processing" || photo.status === "ready") {
-		return toPhotoDto(photo);
+		return toPhotoDto(photo, access);
 	}
 	const head = await headObject(photoKey(photo.id, "original"));
 	if (!head) {
@@ -139,19 +185,23 @@ export async function completePhoto(id: string): Promise<PhotoDto> {
 		data: { status: "processing", size: head.size },
 	});
 	if (!claimed) {
-		return toPhotoDto(await findPhoto(photo.id));
+		return toPhotoDto((await findPhoto(ctx, photo.id)).photo, access);
 	}
 	await enqueue(photoRenditions, { photoId: claimed.id });
-	return toPhotoDto(claimed);
+	return toPhotoDto(claimed, access);
 }
 
 /** Presigned GET for a variant; 404 until the object is known to exist. */
-export async function variantUrl(id: string, variant: string): Promise<string> {
+export async function variantUrl(
+	viewer: Viewer,
+	id: string,
+	variant: string,
+): Promise<string> {
 	const parsedVariant = photoVariant.safeParse(variant);
 	if (!parsedVariant.success) {
 		throw notFound("Unknown photo variant");
 	}
-	const photo = await findPhoto(id);
+	const { photo } = await findPhoto(await loadAccess(viewer), id);
 	const available =
 		parsedVariant.data === "original"
 			? photo.status !== "pending"
@@ -168,16 +218,39 @@ export async function variantUrl(id: string, variant: string): Promise<string> {
  * Assigns a photo to an item (or unassigns it with null) and/or changes its
  * kind. Covers follow: the old item loses this photo as its cover (and gets
  * its next best one), the new item gets it if it has none.
+ *
+ * Ownership: a photo stays with its owner, except that an uploader's own
+ * unassigned capture passes to the item it is assigned to. Unassigning leaves
+ * the photo with the item's owner, so only they or a whole-wardrobe editor may;
+ * anyone else would strand it where they could no longer reach it.
  */
 export async function updatePhoto(
+	viewer: Viewer,
 	id: string,
 	input: UpdatePhotoInput,
 ): Promise<PhotoDto> {
-	const photo = await findPhoto(id);
-	if (input.itemId) {
-		await assertItemExists(input.itemId);
+	const ctx = await loadAccess(viewer);
+	const { photo, access: current } = await findPhoto(ctx, id);
+	requireEdit(current, "Photo");
+	const target = input.itemId
+		? await findEditableItem(ctx, input.itemId)
+		: null;
+	if (
+		target &&
+		target.ownerId !== photo.ownerId &&
+		(photo.itemId || photo.ownerId !== viewer.id)
+	) {
+		throw unprocessable("A photo cannot move to another owner's item");
 	}
 	const moving = input.itemId !== undefined && input.itemId !== photo.itemId;
+	if (moving && input.itemId === null) {
+		const wardrobe = accessToWardrobe(ctx, photo.ownerId);
+		if (wardrobe !== "owner" && wardrobe !== "edit") {
+			throw forbidden(
+				"Only the owner or a whole-wardrobe editor can unassign this photo",
+			);
+		}
+	}
 	const updated = await db().$transaction(async (tx) => {
 		if (moving && photo.itemId) {
 			await tx.item.updateMany({
@@ -187,7 +260,11 @@ export async function updatePhoto(
 		}
 		return tx.photo.update({
 			where: { id: photo.id },
-			data: { itemId: input.itemId, kind: input.kind },
+			data: {
+				itemId: input.itemId,
+				kind: input.kind,
+				ownerId: target?.ownerId,
+			},
 		});
 	});
 	if (moving && photo.itemId) {
@@ -196,12 +273,20 @@ export async function updatePhoto(
 	if (updated.itemId) {
 		await ensureCover(updated.itemId);
 	}
-	return toPhotoDto(updated);
+	const access = requireRead(
+		accessToPhoto(ctx, {
+			ownerId: updated.ownerId,
+			item: input.itemId === undefined ? photo.item : target,
+		}),
+		"Photo",
+	);
+	return toPhotoDto(updated, access);
 }
 
 /** Deletes the objects, then the row (the FK clears any item's cover). */
-export async function deletePhoto(id: string): Promise<void> {
-	const photo = await findPhoto(id);
+export async function deletePhoto(viewer: Viewer, id: string): Promise<void> {
+	const { photo, access } = await findPhoto(await loadAccess(viewer), id);
+	requireEdit(access, "Photo");
 	await deleteObjects(allPhotoKeys(photo.id));
 	await db().photo.deleteMany({ where: { id: photo.id } });
 	if (photo.itemId) {

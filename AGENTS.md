@@ -12,6 +12,8 @@
   validate with zod (`lib/<feature>/schema.ts`), keep data access and rules in
   `lib/<feature>/service.ts`, and throw `ApiError`s (`lib/http/errors`) so
   every error is `{error, message}`. `app/api/locations` is the reference.
+- **Access**: services take the viewer first and check every read and write
+  through `lib/access`; no access is a 404, view access on a write a 403.
 - **Schema changes** go through a Prisma migration (`pnpm db:migrate`); never
   edit an applied migration.
 - **Jobs**: add a definition under `lib/jobs/definitions/`, register it in

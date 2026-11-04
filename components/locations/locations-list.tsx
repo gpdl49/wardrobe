@@ -12,8 +12,10 @@ import {
 	Plus,
 } from "lucide-react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
+import { WardrobeSwitcher } from "@/components/sharing/wardrobe-switcher";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
 import {
@@ -25,7 +27,7 @@ import {
 import { SearchBox } from "@/components/ui/search-box";
 import type { LocationDto, LocationKind } from "@/lib/api/types";
 import { KIND_LABELS, LOCATION_KINDS } from "@/lib/client/labels";
-import { useLocations } from "@/lib/client/queries";
+import { useLocations, useSharedWithMe } from "@/lib/client/queries";
 import { LocationDialog } from "./location-dialog";
 
 export const KIND_ICONS: Record<LocationKind, LucideIcon> = {
@@ -78,9 +80,23 @@ const total = (node: Node): number =>
 	node.location.itemCount + node.children.reduce((n, c) => n + total(c), 0);
 
 export function LocationsList() {
+	const params = useSearchParams();
+	const router = useRouter();
+	const pathname = usePathname();
+	const owner = params.get("owner") ?? "";
+	const shared = useSharedWithMe();
 	const [q, setQ] = useState("");
 	const [archived, setArchived] = useState(false);
-	const locations = useLocations(archived ? { archived: true } : {});
+	const locations = useLocations({
+		...(archived ? { archived: true } : {}),
+		...(owner ? { owner } : {}),
+	});
+	// Top-level locations need the wardrobe, not just one location in it.
+	const canCreate =
+		!owner ||
+		(shared.data ?? []).some(
+			(s) => s.owner.id === owner && !s.location && s.access === "edit",
+		);
 	const filtered = useMemo(() => {
 		const needle = q.trim().toLowerCase();
 		const list = locations.data ?? [];
@@ -97,15 +113,28 @@ export function LocationsList() {
 	return (
 		<>
 			<PageHeader title="Locations">
-				<LocationDialog
-					trigger={
-						<Button variant="primary">
-							<Plus />
-							New location
-						</Button>
-					}
-				/>
+				{canCreate ? (
+					<LocationDialog
+						ownerId={owner || undefined}
+						trigger={
+							<Button variant="primary">
+								<Plus />
+								New location
+							</Button>
+						}
+					/>
+				) : null}
 			</PageHeader>
+			<WardrobeSwitcher
+				className="mb-3"
+				value={owner}
+				onChange={(next) =>
+					router.replace(
+						next ? `${pathname}?owner=${encodeURIComponent(next)}` : pathname,
+						{ scroll: false },
+					)
+				}
+			/>
 			<div className="mb-5 flex flex-wrap items-center gap-3">
 				<SearchBox
 					value={q}
@@ -134,7 +163,9 @@ export function LocationsList() {
 				>
 					{q
 						? "Try another code or name."
-						: "Add your bags, suitcases and closets, then print labels for them."}
+						: owner
+							? "Nothing has been shared with you in this wardrobe yet."
+							: "Add your bags, suitcases and closets, then print labels for them."}
 				</EmptyState>
 			) : (
 				<div className="grid gap-6 lg:grid-cols-2">

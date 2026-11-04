@@ -12,25 +12,62 @@ import { db } from "@/lib/db";
 import { describeWithDb, resetDb } from "@/test/helpers/db";
 import { makeItem } from "@/test/helpers/fixtures";
 import { apiRequest, json, routeParams } from "@/test/helpers/http";
+import { ADMIN_USER } from "@/test/helpers/users";
 
 const MISSING = "0190f5a0-0000-7000-8000-000000000000";
 
 const create = (body: unknown) =>
-	postCategory(apiRequest("/api/categories", { method: "POST", body }), {});
+	postCategory(
+		apiRequest("/api/categories", { method: "POST", body, user: ADMIN_USER }),
+		{},
+	);
 const patch = (id: string, body: unknown) =>
 	patchCategory(
-		apiRequest(`/api/categories/${id}`, { method: "PATCH", body }),
+		apiRequest(`/api/categories/${id}`, {
+			method: "PATCH",
+			body,
+			user: ADMIN_USER,
+		}),
 		routeParams({ id }),
 	);
 const remove = (id: string) =>
 	deleteCategory(
-		apiRequest(`/api/categories/${id}`, { method: "DELETE" }),
+		apiRequest(`/api/categories/${id}`, { method: "DELETE", user: ADMIN_USER }),
 		routeParams({ id }),
 	);
 
 describeWithDb("categories API", () => {
 	beforeEach(async () => {
 		await resetDb();
+	});
+
+	it("lets any signed-in user read but only admins write", async () => {
+		const tops = await json<CategoryDto>(await create({ name: "Tops" }));
+		const params = routeParams({ id: tops.id });
+		const url = `/api/categories/${tops.id}`;
+
+		const list = await listCategories(apiRequest("/api/categories"), {});
+		expect(await json<CategoryDto[]>(list)).toHaveLength(1);
+
+		const post = await postCategory(
+			apiRequest("/api/categories", { method: "POST", body: { name: "x" } }),
+			{},
+		);
+		const update = await patchCategory(
+			apiRequest(url, { method: "PATCH", body: { name: "x" } }),
+			params,
+		);
+		const del = await deleteCategory(
+			apiRequest(url, { method: "DELETE" }),
+			params,
+		);
+		for (const response of [post, update, del]) {
+			expect(response.status).toBe(403);
+			expect(await json(response)).toMatchObject({ error: "forbidden" });
+		}
+		expect((await db().category.findMany()).map((c) => c.name)).toEqual([
+			"Tops",
+		]);
 	});
 
 	it("creates categories, deriving unique slugs", async () => {

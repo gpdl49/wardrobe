@@ -19,8 +19,9 @@ import { enqueue } from "@/lib/jobs/queue";
 import { onPhotoReady } from "@/lib/photos/hooks";
 import { getObjectBytes } from "@/lib/s3";
 import { describeWithDb, resetDb } from "@/test/helpers/db";
-import { makeItem } from "@/test/helpers/fixtures";
-import { apiRequest, json, routeParams } from "@/test/helpers/http";
+import { makeItem, makeLocation } from "@/test/helpers/fixtures";
+import { apiRequest, json, routeParams, TEST_USER } from "@/test/helpers/http";
+import { OTHER_USER, share, userId } from "@/test/helpers/users";
 
 vi.mock("@/lib/jobs/queue", () => ({
 	enqueue: vi.fn(async () => "job-id"),
@@ -44,6 +45,7 @@ function setApiKey(key: string | undefined) {
 async function makePhoto(data: Partial<Prisma.PhotoUncheckedCreateInput> = {}) {
 	return db().photo.create({
 		data: {
+			ownerId: await userId(),
 			kind: "main",
 			status: "ready",
 			contentType: "image/jpeg",
@@ -503,8 +505,9 @@ describeWithDb("analyses", () => {
 			const jumpers = await db().category.create({
 				data: { name: "Jumpers", slug: "jumpers" },
 			});
-			const knit = await db().tag.create({ data: { name: "knit" } });
-			const old = await db().tag.create({ data: { name: "old" } });
+			const ownerId = await userId();
+			const knit = await db().tag.create({ data: { ownerId, name: "knit" } });
+			const old = await db().tag.create({ data: { ownerId, name: "old" } });
 			const item = await makeItem({
 				name: "Something",
 				brand: "Keep",
@@ -610,6 +613,91 @@ describeWithDb("analyses", () => {
 				(await db().analysis.findUniqueOrThrow({ where: { id: analysis.id } }))
 					.appliedAt,
 			).toBeNull();
+		});
+	});
+
+	describe("sharing", () => {
+		const list = (id: string) =>
+			listRoute(
+				apiRequest(`/api/items/${id}/analyses`, { user: OTHER_USER }),
+				routeParams({ id }),
+			);
+		const rerun = (id: string) =>
+			rerunRoute(
+				apiRequest(`/api/items/${id}/analyses`, {
+					method: "POST",
+					body: { kinds: ["colors"] },
+					user: OTHER_USER,
+				}),
+				routeParams({ id }),
+			);
+		const apply = (id: string, analysisId: string, fields: string[]) =>
+			applyRoute(
+				apiRequest(`/api/items/${id}/analyses/${analysisId}/apply`, {
+					method: "POST",
+					body: { fields },
+					user: OTHER_USER,
+				}),
+				routeParams({ id, analysisId }),
+			);
+
+		async function setUp() {
+			const item = await makeItem({ name: "Before" });
+			await makePhoto({ itemId: item.id });
+			const analysis = await db().analysis.create({
+				data: {
+					itemId: item.id,
+					kind: "vision",
+					status: "done",
+					result: { name: "After", tags: ["wool"] },
+				},
+			});
+			return { item, analysis };
+		}
+
+		it("404s everything without access to the item", async () => {
+			const { item, analysis } = await setUp();
+			expect((await list(item.id)).status).toBe(404);
+			expect((await rerun(item.id)).status).toBe(404);
+			expect((await apply(item.id, analysis.id, ["name"])).status).toBe(404);
+			expect(enqueueMock).not.toHaveBeenCalled();
+		});
+
+		it("lets view access read but not re-run or apply", async () => {
+			const { item, analysis } = await setUp();
+			await share(TEST_USER, OTHER_USER, "view");
+			expect((await list(item.id)).status).toBe(200);
+			expect((await rerun(item.id)).status).toBe(403);
+			expect((await apply(item.id, analysis.id, ["name"])).status).toBe(403);
+			expect(enqueueMock).not.toHaveBeenCalled();
+			expect(
+				(await db().item.findUniqueOrThrow({ where: { id: item.id } })).name,
+			).toBe("Before");
+		});
+
+		it("lets edit access re-run and apply, with tags under the item's owner", async () => {
+			const { item, analysis } = await setUp();
+			await share(TEST_USER, OTHER_USER, "edit");
+			expect((await rerun(item.id)).status).toBe(202);
+			const response = await apply(item.id, analysis.id, ["name", "tags"]);
+			expect(response.status).toBe(200);
+			expect(await json<ItemDetailDto>(response)).toMatchObject({
+				name: "After",
+				tags: ["wool"],
+				access: "edit",
+			});
+			const tags = await db().tag.findMany();
+			expect(tags.map((t) => [t.name, t.ownerId])).toEqual([
+				["wool", item.ownerId],
+			]);
+		});
+
+		it("follows a location share", async () => {
+			const location = await makeLocation();
+			const item = await makeItem({ locationId: location.id });
+			await share(TEST_USER, OTHER_USER, "view", location.id);
+			expect((await list(item.id)).status).toBe(200);
+			expect((await rerun(item.id)).status).toBe(403);
 		});
 	});
 });

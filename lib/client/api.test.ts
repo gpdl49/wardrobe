@@ -93,6 +93,35 @@ describe("api client", () => {
 		expect(call(fetch).url).toBe("/api/locations/by-code/B%2007%2Fx");
 	});
 
+	it("sends the owner of a by-code lookup and a tag list", async () => {
+		const { fetch, api } = setup(json({ id: "l" }));
+		await api.locations.getByCode("B-07", { owner: "anna" });
+		expect(call(fetch).url).toBe("/api/locations/by-code/B-07?owner=anna");
+		const tags = setup(json([]));
+		await tags.api.tags.list({ owner: "anna" });
+		expect(call(tags.fetch).url).toBe("/api/tags?owner=anna");
+	});
+
+	it("talks to the sharing endpoints", async () => {
+		const { fetch, api } = setup(json({ id: "s" }));
+		await api.shares.create({ grantee: "anna", access: "view" });
+		expect(call(fetch)).toMatchObject({
+			url: "/api/shares",
+			method: "POST",
+			body: { grantee: "anna", access: "view" },
+		});
+		const patch = setup(json({ id: "s" }));
+		await patch.api.shares.update("s", "edit");
+		expect(call(patch.fetch)).toMatchObject({
+			url: "/api/shares/s",
+			method: "PATCH",
+			body: { access: "edit" },
+		});
+		const mine = setup(json([]));
+		await mine.api.shares.sharedWithMe();
+		expect(call(mine.fetch).url).toBe("/api/shared-with-me");
+	});
+
 	it("returns undefined for 204", async () => {
 		const { api } = setup(new Response(null, { status: 204 }));
 		await expect(api.items.delete("i1")).resolves.toBeUndefined();

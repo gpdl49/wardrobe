@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import { requireUser, type User } from "@/lib/auth";
+import { requireUser, type Viewer } from "@/lib/auth";
 import { badRequest, errorResponse } from "@/lib/http/errors";
 
 /** Second argument Next passes to a route handler with dynamic segments. */
@@ -10,7 +10,7 @@ export type RouteParams<P extends Record<string, string>> = {
 export type AuthedHandler<C> = (
 	request: Request,
 	context: C,
-	user: User,
+	user: Viewer,
 ) => Promise<Response> | Response;
 
 /**
@@ -22,7 +22,7 @@ export type AuthedHandler<C> = (
 export function withAuth<C = unknown>(handler: AuthedHandler<C>) {
 	return async (request: Request, context: C): Promise<Response> => {
 		try {
-			const user = requireUser(request);
+			const user = await requireUser(request);
 			return await handler(request, context, user);
 		} catch (err) {
 			return errorResponse(err);

@@ -17,7 +17,8 @@ import { db } from "@/lib/db";
 import { deleteObjects } from "@/lib/s3";
 import { describeWithDb, resetDb } from "@/test/helpers/db";
 import { makeItem, makeLocation } from "@/test/helpers/fixtures";
-import { apiRequest, json, routeParams } from "@/test/helpers/http";
+import { apiRequest, json, routeParams, TEST_USER } from "@/test/helpers/http";
+import { OTHER_USER, share, THIRD_USER, userId } from "@/test/helpers/users";
 
 vi.mock("@/lib/s3", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/s3")>()),
@@ -49,9 +50,15 @@ const ids = (page: ItemListDto) => page.items.map((i) => i.id);
 const move = (body: unknown) =>
 	moveItems(apiRequest("/api/items/move", { method: "POST", body }), {});
 
-const makePhoto = (itemId: string | null) =>
+const makePhoto = async (itemId: string | null) =>
 	db().photo.create({
-		data: { itemId, kind: "main", contentType: "image/jpeg", size: 1234 },
+		data: {
+			ownerId: await userId(),
+			itemId,
+			kind: "main",
+			contentType: "image/jpeg",
+			size: 1234,
+		},
 	});
 
 const makeCategory = (name: string, parentId: string | null = null) =>
@@ -72,6 +79,8 @@ describeWithDb("items API", () => {
 			const item = await json<ItemSummaryDto>(response);
 			expect(item).toEqual({
 				id: expect.any(String),
+				ownerId: await userId(),
+				access: "owner",
 				name: null,
 				category: null,
 				brand: null,
@@ -558,6 +567,309 @@ describeWithDb("items API", () => {
 			);
 			expect(detail.items).toEqual([item]);
 			expect(detail.children).toMatchObject([{ id: bag.id, itemCount: 1 }]);
+		});
+	});
+
+	describe("sharing", () => {
+		type Actor = typeof OTHER_USER;
+		const as = (user: Actor) => ({
+			create: (body: unknown) =>
+				postItem(apiRequest("/api/items", { method: "POST", body, user }), {}),
+			get: (id: string) =>
+				getItem(apiRequest(`/api/items/${id}`, { user }), routeParams({ id })),
+			patch: (id: string, body: unknown) =>
+				patchItem(
+					apiRequest(`/api/items/${id}`, { method: "PATCH", body, user }),
+					routeParams({ id }),
+				),
+			remove: (id: string) =>
+				deleteItem(
+					apiRequest(`/api/items/${id}`, { method: "DELETE", user }),
+					routeParams({ id }),
+				),
+			move: (body: unknown) =>
+				moveItems(
+					apiRequest("/api/items/move", { method: "POST", body, user }),
+					{},
+				),
+			list: async (query = "") =>
+				json<ItemListDto>(
+					await listItems(apiRequest(`/api/items${query}`, { user }), {}),
+				),
+		});
+		const other = as(OTHER_USER);
+
+		/** TEST_USER's closet with a nested bag, an item in each, one loose. */
+		async function wardrobe() {
+			const closet = await makeLocation({ kind: "closet", code: "CL-1" });
+			const bag = await makeLocation({
+				kind: "bag",
+				code: "B-1",
+				parentId: closet.id,
+			});
+			const elsewhere = await makeLocation({ kind: "drawer", code: "D-1" });
+			return {
+				closet,
+				bag,
+				elsewhere,
+				inCloset: await makeItem({ locationId: closet.id }),
+				inBag: await makeItem({ locationId: bag.id }),
+				inDrawer: await makeItem({ locationId: elsewhere.id }),
+				loose: await makeItem(),
+			};
+		}
+
+		it("hides another user's items entirely", async () => {
+			const { inCloset, loose, closet } = await wardrobe();
+			expect((await other.get(inCloset.id)).status).toBe(404);
+			expect((await other.patch(inCloset.id, { name: "x" })).status).toBe(404);
+			expect((await other.remove(loose.id)).status).toBe(404);
+			expect(ids(await other.list())).toEqual([]);
+			expect(
+				ids(await other.list(`?owner=${await userId(TEST_USER)}`)),
+			).toEqual([]);
+			expect((await other.create({ locationId: closet.id })).status).toBe(422);
+			const unknown = await other.move({
+				itemIds: [inCloset.id],
+				toLocationId: null,
+			});
+			expect(unknown.status).toBe(422);
+			expect((await json<{ message: string }>(unknown)).message).toContain(
+				inCloset.id,
+			);
+		});
+
+		it("lists your own wardrobe by default, a shared one with owner=", async () => {
+			const { inCloset, inBag, inDrawer, loose } = await wardrobe();
+			const mine = await makeItem({ ownerId: await userId(OTHER_USER) });
+			await share(TEST_USER, OTHER_USER, "view");
+			const owner = await userId(TEST_USER);
+			expect(ids(await other.list())).toEqual([mine.id]);
+			const shared = await other.list(`?owner=${owner}`);
+			expect(new Set(ids(shared))).toEqual(
+				new Set([inCloset.id, inBag.id, inDrawer.id, loose.id]),
+			);
+			expect(shared.items.every((i) => i.access === "view")).toBe(true);
+			expect(shared.items.every((i) => i.ownerId === owner)).toBe(true);
+		});
+
+		it("resolves a location code inside the listed owner's wardrobe", async () => {
+			const mine = await makeLocation({ code: "B-07" });
+			const theirs = await makeLocation({
+				code: "B-07",
+				ownerId: await userId(OTHER_USER),
+			});
+			const myItem = await makeItem({ locationId: mine.id });
+			const theirItem = await makeItem({
+				ownerId: theirs.ownerId,
+				locationId: theirs.id,
+			});
+			await share(TEST_USER, OTHER_USER, "view");
+			expect(ids(await list("?location=B-07"))).toEqual([myItem.id]);
+			expect(ids(await other.list("?location=B-07"))).toEqual([theirItem.id]);
+			expect(
+				ids(await other.list(`?location=B-07&owner=${mine.ownerId}`)),
+			).toEqual([myItem.id]);
+		});
+
+		it("covers a shared location and what is nested in it, nothing else", async () => {
+			const { closet, inCloset, inBag, inDrawer, loose } = await wardrobe();
+			await share(TEST_USER, OTHER_USER, "view", closet.id);
+			const listed = await other.list(`?owner=${closet.ownerId}`);
+			expect(new Set(ids(listed))).toEqual(new Set([inCloset.id, inBag.id]));
+			expect((await other.get(inBag.id)).status).toBe(200);
+			expect((await other.get(inDrawer.id)).status).toBe(404);
+			expect((await other.get(loose.id)).status).toBe(404);
+		});
+
+		it("403s writes with view access", async () => {
+			const { closet, bag, inCloset } = await wardrobe();
+			await share(TEST_USER, OTHER_USER, "view");
+			expect((await other.patch(inCloset.id, { name: "x" })).status).toBe(403);
+			expect((await other.remove(inCloset.id)).status).toBe(403);
+			expect((await other.create({ locationId: closet.id })).status).toBe(403);
+			expect((await other.create({ ownerId: closet.ownerId })).status).toBe(
+				403,
+			);
+			expect(
+				(await other.move({ itemIds: [inCloset.id], toLocationId: bag.id }))
+					.status,
+			).toBe(403);
+			expect(await db().movement.count()).toBe(0);
+		});
+
+		it("lets a wardrobe editor do everything to items", async () => {
+			const { elsewhere, closet, loose, inCloset } = await wardrobe();
+			await share(TEST_USER, OTHER_USER, "edit");
+			const unplaced = await other.create({ ownerId: closet.ownerId });
+			expect(unplaced.status).toBe(201);
+			expect(await json<ItemSummaryDto>(unplaced)).toMatchObject({
+				ownerId: closet.ownerId,
+				access: "edit",
+			});
+			expect(
+				(await other.patch(loose.id, { locationId: elsewhere.id })).status,
+			).toBe(200);
+			expect(
+				(await other.patch(inCloset.id, { locationId: null })).status,
+			).toBe(200);
+			expect((await other.remove(loose.id)).status).toBe(204);
+		});
+
+		it("gives new items to the location's owner and rejects a mismatch", async () => {
+			const { closet } = await wardrobe();
+			await share(TEST_USER, OTHER_USER, "edit", closet.id);
+			const created = await other.create({ locationId: closet.id });
+			expect(created.status).toBe(201);
+			expect((await json<ItemSummaryDto>(created)).ownerId).toBe(
+				closet.ownerId,
+			);
+			expect(
+				(
+					await other.create({
+						locationId: closet.id,
+						ownerId: await userId(OTHER_USER),
+					})
+				).status,
+			).toBe(422);
+		});
+
+		it("files tags under the item's owner, not the editor", async () => {
+			const { closet, inCloset } = await wardrobe();
+			await share(TEST_USER, OTHER_USER, "edit", closet.id);
+			await other.patch(inCloset.id, { tags: ["wool"] });
+			const tags = await db().tag.findMany();
+			expect(tags.map((t) => [t.name, t.ownerId])).toEqual([
+				["wool", closet.ownerId],
+			]);
+			await makeItem({ ownerId: await userId(OTHER_USER) });
+			expect(ids(await other.list("?tag=wool"))).toEqual([]);
+		});
+
+		it("limits a location editor to moves inside the share", async () => {
+			const { closet, bag, elsewhere, inCloset, inDrawer } = await wardrobe();
+			await share(TEST_USER, OTHER_USER, "edit", closet.id);
+			// Inside the share.
+			expect(
+				await json(
+					await other.move({ itemIds: [inCloset.id], toLocationId: bag.id }),
+				),
+			).toEqual({ moved: 1 });
+			// Out to a location they cannot see, and in from one.
+			expect(
+				(await other.patch(inCloset.id, { locationId: elsewhere.id })).status,
+			).toBe(422);
+			expect(
+				(
+					await other.move({
+						itemIds: [inCloset.id],
+						toLocationId: elsewhere.id,
+					})
+				).status,
+			).toBe(422);
+			expect(
+				(await other.move({ itemIds: [inDrawer.id], toLocationId: bag.id }))
+					.status,
+			).toBe(422);
+			// Unplacing leaves the share.
+			expect(
+				(await other.patch(inCloset.id, { locationId: null })).status,
+			).toBe(403);
+			expect(
+				(await other.move({ itemIds: [inCloset.id], toLocationId: null }))
+					.status,
+			).toBe(403);
+			// A new unplaced item is outside the share too.
+			expect((await other.create({ ownerId: closet.ownerId })).status).toBe(
+				404,
+			);
+		});
+
+		it("refuses a move into a location shared view-only", async () => {
+			const { closet, elsewhere, inCloset } = await wardrobe();
+			await share(TEST_USER, OTHER_USER, "edit", closet.id);
+			await share(TEST_USER, OTHER_USER, "view", elsewhere.id);
+			expect(
+				(
+					await other.move({
+						itemIds: [inCloset.id],
+						toLocationId: elsewhere.id,
+					})
+				).status,
+			).toBe(403);
+		});
+
+		it("422s a move between owners, in either direction", async () => {
+			const { closet, inCloset } = await wardrobe();
+			await share(TEST_USER, OTHER_USER, "edit");
+			const ownerId = await userId(OTHER_USER);
+			const mine = await makeLocation({ code: "MINE", ownerId });
+			const myItem = await makeItem({ ownerId, locationId: mine.id });
+			for (const response of [
+				await other.patch(inCloset.id, { locationId: mine.id }),
+				await other.move({ itemIds: [inCloset.id], toLocationId: mine.id }),
+				await other.patch(myItem.id, { locationId: closet.id }),
+				await other.move({
+					itemIds: [myItem.id, inCloset.id],
+					toLocationId: closet.id,
+				}),
+			]) {
+				expect(response.status).toBe(422);
+			}
+			expect(await db().movement.count()).toBe(0);
+		});
+
+		it("needs a session from the same wardrobe that the caller can edit", async () => {
+			const { closet, elsewhere, inCloset } = await wardrobe();
+			await share(TEST_USER, OTHER_USER, "edit", closet.id);
+			const session = (locationId: string, ownerId: string) =>
+				db().packingSession.create({
+					data: { mode: "pack", locationId, ownerId },
+				});
+			const hidden = await session(elsewhere.id, elsewhere.ownerId);
+			const ownerId = await userId(OTHER_USER);
+			const mine = await makeLocation({ code: "MINE", ownerId });
+			const foreign = await session(mine.id, ownerId);
+			const shared = await session(closet.id, closet.ownerId);
+			const bag = await makeLocation({ code: "B-9", parentId: closet.id });
+			for (const [sessionId, status] of [
+				[hidden.id, 422],
+				[foreign.id, 422],
+				[shared.id, 200],
+			] as const) {
+				const response = await other.move({
+					itemIds: [inCloset.id],
+					toLocationId: bag.id,
+					sessionId,
+				});
+				expect(response.status).toBe(status);
+			}
+		});
+
+		it("redacts movement references to locations the caller cannot read", async () => {
+			const { closet, elsewhere, inDrawer } = await wardrobe();
+			await patch(inDrawer.id, { locationId: closet.id });
+			await share(TEST_USER, THIRD_USER, "view", closet.id);
+			await share(TEST_USER, OTHER_USER, "view");
+
+			const limited = await json<ItemDetailDto>(
+				await as(THIRD_USER).get(inDrawer.id),
+			);
+			expect(limited.movements).toHaveLength(1);
+			expect(limited.movements[0]?.from).toBeNull();
+			expect(limited.movements[0]?.to?.id).toBe(closet.id);
+
+			const full = await json<ItemDetailDto>(await other.get(inDrawer.id));
+			expect(full.movements[0]?.from?.id).toBe(elsewhere.id);
+			expect(full.access).toBe("view");
+		});
+
+		it("stops access as soon as a share is revoked", async () => {
+			const { inCloset } = await wardrobe();
+			const grant = await share(TEST_USER, OTHER_USER, "edit");
+			expect((await other.get(inCloset.id)).status).toBe(200);
+			await db().share.delete({ where: { id: grant.id } });
+			expect((await other.get(inCloset.id)).status).toBe(404);
 		});
 	});
 });

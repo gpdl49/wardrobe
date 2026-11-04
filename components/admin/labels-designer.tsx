@@ -60,9 +60,10 @@ export function LabelsDesigner() {
 							<p className="text-sm text-muted">
 								Each label's QR code opens{" "}
 								<code className="text-xs">
-									wardrobe.vidur.xyz/l/&lt;code&gt;
+									wardrobe.vidur.xyz/l/&lt;your id&gt;/&lt;code&gt;
 								</code>
-								. Sheets are A4, 3 × 8 labels of 70 × 37 mm; print at 100 %.
+								, so it only ever opens your own location. Sheets are A4, 3 × 8
+								labels of 70 × 37 mm; print at 100 %.
 							</p>
 							<Field
 								label="Skip labels already used"

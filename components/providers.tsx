@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 import { isApiError } from "@/lib/client/api";
+import { CurrentUserProvider } from "@/lib/client/current-user";
 
 export function makeQueryClient() {
 	return new QueryClient({
@@ -23,5 +24,9 @@ export function makeQueryClient() {
 
 export function Providers({ children }: { children: ReactNode }) {
 	const [client] = useState(makeQueryClient);
-	return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+	return (
+		<QueryClientProvider client={client}>
+			<CurrentUserProvider>{children}</CurrentUserProvider>
+		</QueryClientProvider>
+	);
 }

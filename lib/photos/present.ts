@@ -1,4 +1,4 @@
-import type { PhotoDto, PhotoVariant } from "@/lib/api/types";
+import type { Access, PhotoDto, PhotoVariant } from "@/lib/api/types";
 import type { Photo } from "@/lib/generated/prisma/client";
 
 const variants: PhotoVariant[] = ["original", "display", "thumb"];
@@ -8,9 +8,11 @@ export function photoUrl(id: string, variant: PhotoVariant): string {
 }
 
 /** Serialises a Photo row to its API shape (lib/api/types.ts). */
-export function toPhotoDto(photo: Photo): PhotoDto {
+export function toPhotoDto(photo: Photo, access: Access): PhotoDto {
 	return {
 		id: photo.id,
+		ownerId: photo.ownerId,
+		access,
 		itemId: photo.itemId,
 		kind: photo.kind,
 		status: photo.status,

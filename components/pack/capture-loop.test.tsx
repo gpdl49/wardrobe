@@ -27,6 +27,8 @@ const location: LocationRef = {
 };
 const session: PackingSessionDto = {
 	id: "sess-1",
+	ownerId: "owner-1",
+	access: "owner",
 	mode: "pack",
 	locationId: "loc-1",
 	startedAt: "2026-11-03T10:00:00.000Z",

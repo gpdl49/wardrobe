@@ -7,14 +7,16 @@ import {
 } from "@/app/api/photos/[id]/route";
 import { POST as postPhoto } from "@/app/api/photos/route";
 import type { PhotoDto, PhotoUploadDto } from "@/lib/api/types";
+import type { User } from "@/lib/auth";
 import { db } from "@/lib/db";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { photoRenditions } from "@/lib/jobs/definitions/photo-renditions";
 import { MAX_ORIGINAL_BYTES, photoKey } from "@/lib/s3";
 import { describeWithDb, resetDb } from "@/test/helpers/db";
-import { makeItem } from "@/test/helpers/fixtures";
-import { apiRequest, json, routeParams } from "@/test/helpers/http";
+import { makeItem, makeLocation } from "@/test/helpers/fixtures";
+import { apiRequest, json, routeParams, TEST_USER } from "@/test/helpers/http";
 import { type FakeS3, installFakeS3 } from "@/test/helpers/s3";
+import { OTHER_USER, share, THIRD_USER, userId } from "@/test/helpers/users";
 
 const { enqueue } = vi.hoisted(() => ({
 	enqueue: vi.fn(async (..._args: unknown[]) => "job-1"),
@@ -30,34 +32,40 @@ const JPEG_BYTES = new Uint8Array(1234);
 
 async function makePhoto(data: Partial<Prisma.PhotoUncheckedCreateInput> = {}) {
 	return db().photo.create({
-		data: { kind: "main", contentType: "image/jpeg", size: 1234, ...data },
+		data: {
+			ownerId: await userId(),
+			kind: "main",
+			contentType: "image/jpeg",
+			size: 1234,
+			...data,
+		},
 	});
 }
 
-const post = (body: unknown) =>
-	postPhoto(apiRequest("/api/photos", { method: "POST", body }), {});
+const post = (body: unknown, user?: User) =>
+	postPhoto(apiRequest("/api/photos", { method: "POST", body, user }), {});
 
-const complete = (id: string) =>
+const complete = (id: string, user?: User) =>
 	completePhoto(
-		apiRequest(`/api/photos/${id}/complete`, { method: "POST" }),
+		apiRequest(`/api/photos/${id}/complete`, { method: "POST", user }),
 		routeParams({ id }),
 	);
 
-const variant = (id: string, name: string) =>
+const variant = (id: string, name: string, user?: User) =>
 	getVariant(
-		apiRequest(`/api/photos/${id}/${name}`),
+		apiRequest(`/api/photos/${id}/${name}`, { user }),
 		routeParams({ id, variant: name }),
 	);
 
-const patch = (id: string, body: unknown) =>
+const patch = (id: string, body: unknown, user?: User) =>
 	patchPhoto(
-		apiRequest(`/api/photos/${id}`, { method: "PATCH", body }),
+		apiRequest(`/api/photos/${id}`, { method: "PATCH", body, user }),
 		routeParams({ id }),
 	);
 
-const remove = (id: string) =>
+const remove = (id: string, user?: User) =>
 	deletePhoto(
-		apiRequest(`/api/photos/${id}`, { method: "DELETE" }),
+		apiRequest(`/api/photos/${id}`, { method: "DELETE", user }),
 		routeParams({ id }),
 	);
 
@@ -390,6 +398,175 @@ describeWithDb("photos API", () => {
 
 		it("404s for an unknown id", async () => {
 			expect((await remove(MISSING)).status).toBe(404);
+		});
+	});
+
+	describe("access", () => {
+		const upload = (itemId?: string) => ({
+			...(itemId ? { itemId } : {}),
+			kind: "main",
+			contentType: "image/jpeg",
+			size: 10,
+		});
+
+		/** OTHER_USER's item in a location, with a ready photo on it. */
+		async function theirs() {
+			const ownerId = await userId(OTHER_USER);
+			const location = await makeLocation({ ownerId });
+			const item = await makeItem({ ownerId, locationId: location.id });
+			const photo = await makePhoto({
+				ownerId,
+				itemId: item.id,
+				status: "ready",
+			});
+			return { ownerId, location, item, photo };
+		}
+
+		it("hides everything from a user with no access", async () => {
+			const { item, photo } = await theirs();
+			expect((await post(upload(item.id))).status).toBe(404);
+			expect((await variant(photo.id, "thumb")).status).toBe(404);
+			expect((await variant(photo.id, "original")).status).toBe(404);
+			expect((await complete(photo.id)).status).toBe(404);
+			expect((await patch(photo.id, { kind: "label" })).status).toBe(404);
+			expect((await remove(photo.id)).status).toBe(404);
+			expect(await db().photo.count()).toBe(1);
+			const after = await db().photo.findUniqueOrThrow({
+				where: { id: photo.id },
+			});
+			expect(after.kind).toBe("main");
+		});
+
+		it("keeps an unassigned capture to its uploader", async () => {
+			const created = await json<PhotoUploadDto>(await post(upload()));
+			expect(created.photo).toMatchObject({
+				ownerId: await userId(),
+				access: "owner",
+			});
+			const { id } = created.photo;
+			await db().photo.update({ where: { id }, data: { status: "ready" } });
+			expect((await variant(id, "thumb")).status).toBe(302);
+			for (const user of [OTHER_USER, THIRD_USER]) {
+				expect((await variant(id, "thumb", user)).status).toBe(404);
+				expect((await remove(id, user)).status).toBe(404);
+			}
+		});
+
+		it("does not show a capture to a location share, only a wardrobe one", async () => {
+			const location = await makeLocation();
+			await share(TEST_USER, OTHER_USER, "edit", location.id);
+			await share(TEST_USER, THIRD_USER, "view");
+			const capture = await makePhoto({ status: "ready" });
+			expect((await variant(capture.id, "thumb", OTHER_USER)).status).toBe(404);
+			expect((await variant(capture.id, "thumb", THIRD_USER)).status).toBe(302);
+		});
+
+		it("lets view access read but not write", async () => {
+			const { item, photo } = await theirs();
+			await share(OTHER_USER, TEST_USER, "view");
+			expect((await variant(photo.id, "thumb")).status).toBe(302);
+			expect((await post(upload(item.id))).status).toBe(403);
+			expect((await complete(photo.id)).status).toBe(403);
+			expect((await patch(photo.id, { kind: "label" })).status).toBe(403);
+			expect((await remove(photo.id)).status).toBe(403);
+			expect(await db().photo.count()).toBe(1);
+		});
+
+		it("lets a location editor work inside the share, for the owner", async () => {
+			const { ownerId, location, item, photo } = await theirs();
+			await share(OTHER_USER, TEST_USER, "edit", location.id);
+
+			const response = await post(upload(item.id));
+			expect(response.status).toBe(201);
+			const created = await json<PhotoUploadDto>(response);
+			expect(created.photo).toMatchObject({ ownerId, access: "edit" });
+			s3.upload(photoKey(created.photo.id, "original"), JPEG_BYTES);
+			expect((await complete(created.photo.id)).status).toBe(200);
+
+			const patched = await patch(photo.id, { kind: "label" });
+			expect(await json(patched)).toMatchObject({
+				kind: "label",
+				access: "edit",
+			});
+			expect((await remove(photo.id)).status).toBe(204);
+		});
+
+		it("does not reach items outside a location share", async () => {
+			const { ownerId, location } = await theirs();
+			await share(OTHER_USER, TEST_USER, "edit", location.id);
+			const elsewhere = await makeItem({ ownerId });
+			const photo = await makePhoto({ ownerId, itemId: elsewhere.id });
+			expect((await post(upload(elsewhere.id))).status).toBe(404);
+			expect((await variant(photo.id, "original")).status).toBe(404);
+		});
+
+		it("passes a capture to the owner of the item it is assigned to", async () => {
+			const { ownerId, location, item } = await theirs();
+			await share(OTHER_USER, TEST_USER, "edit", location.id);
+			const capture = await makePhoto({ status: "ready" });
+
+			const response = await patch(capture.id, { itemId: item.id });
+			expect(response.status).toBe(200);
+			expect(await json(response)).toMatchObject({
+				itemId: item.id,
+				ownerId,
+				access: "edit",
+			});
+			expect(
+				(await db().photo.findUniqueOrThrow({ where: { id: capture.id } }))
+					.ownerId,
+			).toBe(ownerId);
+			expect((await variant(capture.id, "thumb", OTHER_USER)).status).toBe(302);
+		});
+
+		it("needs edit on the item a capture is assigned to", async () => {
+			const { item } = await theirs();
+			const capture = await makePhoto();
+			expect((await patch(capture.id, { itemId: item.id })).status).toBe(404);
+			await share(OTHER_USER, TEST_USER, "view");
+			expect((await patch(capture.id, { itemId: item.id })).status).toBe(403);
+			expect(
+				(await db().photo.findUniqueOrThrow({ where: { id: capture.id } }))
+					.itemId,
+			).toBeNull();
+		});
+
+		it("422s moving an assigned photo to another owner's item", async () => {
+			const { item, photo } = await theirs();
+			await share(OTHER_USER, TEST_USER, "edit");
+			const mine = await makeItem();
+			const myPhoto = await makePhoto({ itemId: mine.id });
+			expect((await patch(photo.id, { itemId: mine.id })).status).toBe(422);
+			expect((await patch(myPhoto.id, { itemId: item.id })).status).toBe(422);
+		});
+
+		it("422s taking someone else's capture into another wardrobe", async () => {
+			const ownerId = await userId(OTHER_USER);
+			await share(OTHER_USER, TEST_USER, "edit");
+			const capture = await makePhoto({ ownerId });
+			const mine = await makeItem();
+			expect((await patch(capture.id, { itemId: mine.id })).status).toBe(422);
+			const theirItem = await makeItem({ ownerId });
+			expect((await patch(capture.id, { itemId: theirItem.id })).status).toBe(
+				200,
+			);
+		});
+
+		it("lets only the owner or a wardrobe editor unassign", async () => {
+			const { ownerId, location, photo } = await theirs();
+			await share(OTHER_USER, TEST_USER, "edit", location.id);
+			await share(OTHER_USER, THIRD_USER, "edit");
+
+			expect((await patch(photo.id, { itemId: null })).status).toBe(403);
+			const byEditor = await patch(photo.id, { itemId: null }, THIRD_USER);
+			expect(byEditor.status).toBe(200);
+			expect(await json(byEditor)).toMatchObject({ itemId: null, ownerId });
+
+			const item = await makeItem({ ownerId, locationId: location.id });
+			await patch(photo.id, { itemId: item.id }, OTHER_USER);
+			const byOwner = await patch(photo.id, { itemId: null }, OTHER_USER);
+			expect(byOwner.status).toBe(200);
+			expect(await json(byOwner)).toMatchObject({ ownerId, access: "owner" });
 		});
 	});
 });

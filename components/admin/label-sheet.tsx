@@ -4,14 +4,14 @@ import { QrCode } from "./qr-code";
 
 export const LABEL_BASE_URL = "https://wardrobe.vidur.xyz/l/";
 
-export const labelUrl = (code: string) =>
-	`${LABEL_BASE_URL}${encodeURIComponent(code)}`;
+export const labelUrl = (ownerId: string, code: string) =>
+	`${LABEL_BASE_URL}${encodeURIComponent(ownerId)}/${encodeURIComponent(code)}`;
 
 /** A4 sheet of 3 × 8 labels, 70 × 37 mm (e.g. Avery 3475 / L7159-style). */
 export const SHEET = { columns: 3, rows: 8, width: 70, height: 37 } as const;
 export const PER_SHEET = SHEET.columns * SHEET.rows;
 
-type Label = Pick<LocationDto, "id" | "kind" | "code" | "name">;
+type Label = Pick<LocationDto, "id" | "ownerId" | "kind" | "code" | "name">;
 
 /**
  * Splits labels into A4 pages, leaving the first `skip` positions blank so a
@@ -71,7 +71,7 @@ export function LabelSheet({
 								className="flex items-center gap-[3mm] overflow-hidden p-[3mm]"
 							>
 								<QrCode
-									value={labelUrl(cell.code)}
+									value={labelUrl(cell.ownerId, cell.code)}
 									className="h-[29mm] w-[29mm] shrink-0"
 								/>
 								<div className="flex min-w-0 flex-col gap-[1mm]">

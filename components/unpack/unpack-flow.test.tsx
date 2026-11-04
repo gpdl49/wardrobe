@@ -20,6 +20,8 @@ const loc = (
 	name: string,
 ): LocationDto => ({
 	id,
+	ownerId: "user-a",
+	access: "owner",
 	kind,
 	code,
 	name,

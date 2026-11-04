@@ -28,6 +28,8 @@ export const createLocationSchema = z.strictObject({
 	name,
 	notes: notes.nullish(),
 	parentId: id.nullish(),
+	/** Default: the parent's owner, else the caller. */
+	ownerId: id.optional(),
 });
 export type CreateLocationInput = z.output<typeof createLocationSchema>;
 
@@ -51,7 +53,14 @@ export const listLocationsQuery = z.object({
 	q: z.string().trim().max(200).optional(),
 	/** Not in the contract: archived locations are hidden unless "true". */
 	archived: flag.optional(),
+	/** Whose wardrobe, default the caller. */
+	owner: id.optional(),
 });
 export type ListLocationsQuery = z.output<typeof listLocationsQuery>;
+
+export const locationByCodeQuery = z.object({
+	/** Whose wardrobe, default the caller. */
+	owner: id.optional(),
+});
 
 export const idParam = z.uuid();

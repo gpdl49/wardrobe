@@ -10,6 +10,7 @@ import { ApiError } from "@/lib/http/errors";
 const proxy = {
 	AUTH_MODE: "proxy",
 	REQUIRED_GROUP: "wardrobe",
+	ADMIN_GROUP: "wardrobe-admin",
 	NODE_ENV: "production",
 } as const;
 
@@ -122,7 +123,7 @@ describe("authenticate", () => {
 				AUTH_MODE: "dev",
 				NODE_ENV: "development",
 			}),
-		).toEqual(devUser("wardrobe"));
+		).toEqual(devUser("wardrobe", "wardrobe-admin"));
 	});
 
 	it("refuses dev mode in production", () => {

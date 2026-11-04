@@ -6,17 +6,22 @@ import { createPhotoUpload, refreshPhotoUpload } from "@/lib/photos/service";
 
 export const POST = withAuth(
 	withIdempotency(
-		async (request) => {
+		async (request, _context, user) => {
 			const input = await parseBody(request, createPhotoSchema);
-			return Response.json(await createPhotoUpload(input), { status: 201 });
+			return Response.json(await createPhotoUpload(user, input), {
+				status: 201,
+			});
 		},
 		{
 			// A replay re-presigns the PUT: the stored URL may have expired.
-			replay: async (stored) =>
+			replay: async (stored, user) =>
 				stored.status === 201
 					? {
 							status: stored.status,
-							body: await refreshPhotoUpload(stored.body as PhotoUploadDto),
+							body: await refreshPhotoUpload(
+								user,
+								stored.body as PhotoUploadDto,
+							),
 						}
 					: stored,
 		},

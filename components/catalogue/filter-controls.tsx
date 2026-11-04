@@ -166,9 +166,10 @@ export function FilterControls({
 	onChange: (patch: Partial<CatalogueFilters>) => void;
 }) {
 	const id = useId();
-	const locations = useLocations();
+	const owner = filters.owner || undefined;
+	const locations = useLocations({ owner });
 	const categories = useCategories();
-	const tags = useTags();
+	const tags = useTags(owner);
 	return (
 		<div className="flex flex-col gap-5">
 			<Section label="Location" htmlFor={`${id}-location`}>

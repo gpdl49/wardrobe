@@ -13,6 +13,10 @@ export type PhotoVariant = "original" | "display" | "thumb";
 export type SessionMode = "pack" | "unpack";
 export type AnalysisKind = "colors" | "vision";
 export type AnalysisStatus = "queued" | "running" | "done" | "failed";
+/** What a share grants. */
+export type ShareAccess = "view" | "edit";
+/** What the caller may do with a row. */
+export type Access = "owner" | ShareAccess;
 
 export interface ApiError {
 	error: string;
@@ -21,6 +25,8 @@ export interface ApiError {
 
 export interface LocationDto {
 	id: string;
+	ownerId: string;
+	access: Access;
 	kind: LocationKind;
 	code: string;
 	name: string;
@@ -77,6 +83,8 @@ export interface ItemColor {
 
 export interface PhotoDto {
 	id: string;
+	ownerId: string;
+	access: Access;
 	itemId: string | null;
 	kind: PhotoKind;
 	status: PhotoStatus;
@@ -93,6 +101,8 @@ export interface PhotoDto {
 /** Item in lists (GET /api/items, location contents). */
 export interface ItemSummaryDto {
 	id: string;
+	ownerId: string;
+	access: Access;
 	name: string | null;
 	category: CategoryRef | null;
 	brand: string | null;
@@ -171,6 +181,8 @@ export interface PhotoUploadDto {
 
 export interface PackingSessionDto {
 	id: string;
+	ownerId: string;
+	access: Access;
 	mode: SessionMode;
 	locationId: string;
 	startedAt: string;
@@ -178,10 +190,40 @@ export interface PackingSessionDto {
 }
 
 export interface MeDto {
+	id: string;
 	sub: string;
 	email: string | null;
 	username: string | null;
 	groups: string[];
+	isAdmin: boolean;
+}
+
+/** Another user, as shown on a share. */
+export interface UserRef {
+	id: string;
+	email: string | null;
+	username: string | null;
+}
+
+/** GET /api/shares: a share the caller owns. */
+export interface ShareDto {
+	id: string;
+	ownerId: string;
+	grantee: UserRef;
+	access: ShareAccess;
+	/** Null: the whole wardrobe. */
+	location: LocationRef | null;
+	createdAt: string;
+	updatedAt: string;
+}
+
+/** GET /api/shared-with-me */
+export interface SharedWithMeDto {
+	id: string;
+	owner: UserRef;
+	access: ShareAccess;
+	/** Null: the whole wardrobe. */
+	location: Pick<LocationRef, "id" | "code" | "name"> | null;
 }
 
 /** GET /api/sessions/{id}: the session and the items moved in it. */

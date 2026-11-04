@@ -29,6 +29,9 @@ import type {
 	PhotoVariant,
 	Season,
 	SessionMode,
+	ShareAccess,
+	ShareDto,
+	SharedWithMeDto,
 	TagCountDto,
 } from "@/lib/api/types";
 
@@ -109,6 +112,8 @@ const FALLBACK_CODES: Record<number, string> = {
 // ---------------------------------------------------------------------------
 
 export interface LocationsQuery {
+	/** Whose wardrobe (a user id); defaults to the caller's. */
+	owner?: string;
 	kind?: LocationKind;
 	q?: string;
 	/** Not in the contract: include archived locations. */
@@ -116,6 +121,8 @@ export interface LocationsQuery {
 }
 
 export interface CreateLocationInput {
+	/** Whose wardrobe; defaults to the parent's owner, else the caller. */
+	ownerId?: string;
 	kind: LocationKind;
 	code: string;
 	name: string;
@@ -143,6 +150,8 @@ export interface CreateCategoryInput {
 export type UpdateCategoryInput = Partial<CreateCategoryInput>;
 
 export interface ItemsQuery {
+	/** Whose wardrobe (a user id); defaults to the caller's. */
+	owner?: string;
 	/** Location id or code. */
 	location?: string;
 	/** Category id or slug; includes its subcategories. */
@@ -160,6 +169,8 @@ export interface ItemsQuery {
 
 /** Editable item fields (POST /items, PATCH /items/{id}). */
 export interface ItemInput {
+	/** POST only: whose wardrobe; defaults to the location's owner, else the caller. */
+	ownerId?: string;
 	name?: string | null;
 	categoryId?: string | null;
 	brand?: string | null;
@@ -197,6 +208,14 @@ export interface CreatePhotoInput {
  * label text is appended to its notes, the rest replace the item's value.
  */
 export type SuggestionField = keyof ItemSuggestion;
+
+export interface CreateShareInput {
+	/** Email or username of someone who has signed in at least once. */
+	grantee: string;
+	access: ShareAccess;
+	/** Omitted: the whole wardrobe. */
+	locationId?: string;
+}
 
 export interface RerunAnalysisInput {
 	/** Defaults to every kind the server can run. */
@@ -360,8 +379,13 @@ export function createApiClient(options: ApiClientOptions = {}) {
 				request<LocationDetailDto>("GET", `/locations/${enc(id)}`, {
 					signal,
 				}),
-			getByCode: (code: string, signal?: AbortSignal) =>
+			/** Looks only in `owner`'s wardrobe (default: the caller's). */
+			getByCode: (
+				code: string,
+				{ owner, signal }: { owner?: string; signal?: AbortSignal } = {},
+			) =>
 				request<LocationDto>("GET", `/locations/by-code/${enc(code)}`, {
+					query: { owner },
 					signal,
 				}),
 			create: (input: CreateLocationInput) =>
@@ -386,8 +410,22 @@ export function createApiClient(options: ApiClientOptions = {}) {
 		},
 
 		tags: {
+			list: (query: { owner?: string } = {}, signal?: AbortSignal) =>
+				request<TagCountDto[]>("GET", "/tags", { query, signal }),
+		},
+
+		shares: {
+			/** Shares the caller owns. */
 			list: (signal?: AbortSignal) =>
-				request<TagCountDto[]>("GET", "/tags", { signal }),
+				request<ShareDto[]>("GET", "/shares", { signal }),
+			/** 422 for an unknown grantee or yourself, 409 for a duplicate. */
+			create: (input: CreateShareInput) =>
+				request<ShareDto>("POST", "/shares", { body: input }),
+			update: (id: string, access: ShareAccess) =>
+				request<ShareDto>("PATCH", `/shares/${enc(id)}`, { body: { access } }),
+			delete: (id: string) => request<void>("DELETE", `/shares/${enc(id)}`),
+			sharedWithMe: (signal?: AbortSignal) =>
+				request<SharedWithMeDto[]>("GET", "/shared-with-me", { signal }),
 		},
 
 		items: {

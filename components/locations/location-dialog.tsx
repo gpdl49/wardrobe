@@ -29,12 +29,18 @@ export function subtreeIds(locations: LocationDto[], id: string): Set<string> {
 /** Create (no `location`) or edit a location. */
 export function LocationDialog({
 	location,
+	ownerId,
 	defaultParentId,
+	lockParent = false,
 	trigger,
 	onSaved,
 }: {
 	location?: LocationDto;
+	/** Whose wardrobe a new location goes in; defaults to the caller's. */
+	ownerId?: string;
 	defaultParentId?: string;
+	/** The API would refuse re-parenting this location. */
+	lockParent?: boolean;
 	trigger: ReactNode;
 	onSaved?: (location: LocationDto) => void;
 }) {
@@ -49,7 +55,9 @@ export function LocationDialog({
 			{open ? (
 				<LocationForm
 					location={location}
+					ownerId={ownerId}
 					defaultParentId={defaultParentId}
+					lockParent={lockParent}
 					onCancel={() => setOpen(false)}
 					onSaved={(saved) => {
 						setOpen(false);
@@ -63,17 +71,25 @@ export function LocationDialog({
 
 function LocationForm({
 	location,
+	ownerId,
 	defaultParentId,
+	lockParent,
 	onCancel,
 	onSaved,
 }: {
 	location?: LocationDto;
+	ownerId?: string;
 	defaultParentId?: string;
+	lockParent: boolean;
 	onCancel: () => void;
 	onSaved: (location: LocationDto) => void;
 }) {
 	const id = useId();
-	const locations = useLocations({ archived: true });
+	const owner = location?.ownerId ?? ownerId;
+	const locations = useLocations({
+		archived: true,
+		...(owner ? { owner } : {}),
+	});
 	const save = useSaveLocation();
 	const [kind, setKind] = useState<LocationKind>(location?.kind ?? "bag");
 	const [code, setCode] = useState(location?.code ?? "");
@@ -93,11 +109,15 @@ function LocationForm({
 			code: code.trim(),
 			name: name.trim(),
 			notes: notes.trim() || null,
-			parentId: parentId || null,
+			// Left out when locked: a shared location refuses re-parenting.
+			...(lockParent ? {} : { parentId: parentId || null }),
 		};
-		save.mutate(location ? { id: location.id, input } : { input }, {
-			onSuccess: onSaved,
-		});
+		save.mutate(
+			location
+				? { id: location.id, input }
+				: { input: { ...input, ...(ownerId ? { ownerId } : {}) } },
+			{ onSuccess: onSaved },
+		);
 	};
 
 	return (
@@ -146,6 +166,7 @@ function LocationForm({
 				<Select
 					id={`${id}-parent`}
 					value={parentId}
+					disabled={lockParent}
 					onChange={(e) => setParentId(e.target.value)}
 				>
 					<option value="">Not inside anything</option>

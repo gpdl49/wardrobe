@@ -41,7 +41,7 @@ const defaultApi: UnpackApi = {
 };
 
 type Props = {
-	/** From /unpack?location=<id> (e.g. /l/<code>?then=unpack). */
+	/** From /unpack?location=<id> (e.g. /l/<ownerId>/<code>?then=unpack). */
 	initialLocationId?: string;
 	api?: UnpackApi;
 };
@@ -53,7 +53,7 @@ type Props = {
  */
 export function UnpackFlow({ initialLocationId, api = defaultApi }: Props) {
 	const router = useRouter();
-	const [source, setSource] = useState<LocationRef | null>(null);
+	const [source, setSource] = useState<LocationDto | null>(null);
 	const [items, setItems] = useState<ItemSummaryDto[] | null>(null);
 	const [selected, setSelected] = useState<Set<string>>(new Set());
 	const [choosingDestination, setChoosingDestination] = useState(false);
@@ -73,6 +73,10 @@ export function UnpackFlow({ initialLocationId, api = defaultApi }: Props) {
 		setItems(null);
 		try {
 			const location = await api.getLocation(id);
+			if (location.access === "view") {
+				setError(`You have view access to ${location.code}.`);
+				return;
+			}
 			setSource(location);
 			setItems(location.items);
 			setSelected(new Set());
@@ -200,6 +204,7 @@ export function UnpackFlow({ initialLocationId, api = defaultApi }: Props) {
 					</button>
 				</div>
 				<LocationPicker
+					ownerId={source.ownerId}
 					preferKinds={["closet", "drawer"]}
 					excludeId={source.id}
 					onChoose={(location) => void move(location)}

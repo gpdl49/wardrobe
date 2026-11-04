@@ -15,3 +15,8 @@ export const tagList = z
 	.array(tagName)
 	.max(50)
 	.transform((tags) => [...new Set(tags)]);
+
+export const listTagsQuery = z.object({
+	/** Whose wardrobe, default the caller. */
+	owner: z.uuid().optional(),
+});

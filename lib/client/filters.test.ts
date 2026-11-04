@@ -2,12 +2,26 @@ import { describe, expect, it } from "vitest";
 import {
 	activeFilterCount,
 	DEFAULT_FILTERS,
+	ITEM_FILTER_KEYS,
 	parseFilters,
 	serializeFilters,
 	toItemsQuery,
 } from "./filters";
 
 describe("catalogue filters", () => {
+	it("carries the wardrobe through the URL and the items query", () => {
+		const filters = parseFilters(new URLSearchParams("owner=anna"));
+		expect(filters.owner).toBe("anna");
+		expect(serializeFilters(filters)).toBe("owner=anna");
+		expect(toItemsQuery(filters)).toEqual({ owner: "anna" });
+		expect(toItemsQuery(DEFAULT_FILTERS)).toEqual({});
+	});
+
+	it("does not count the wardrobe as a filter to clear", () => {
+		expect(activeFilterCount({ ...DEFAULT_FILTERS, owner: "anna" })).toBe(0);
+		expect(ITEM_FILTER_KEYS).not.toContain("owner");
+	});
+
 	it("parses known values and drops invalid ones", () => {
 		const filters = parseFilters(
 			new URLSearchParams(
