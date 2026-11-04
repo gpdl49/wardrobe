@@ -1,3 +1,4 @@
+import { db } from "@/lib/db";
 import { type Env, env } from "@/lib/env";
 import { forbidden, unauthorized } from "@/lib/http/errors";
 
@@ -15,18 +16,25 @@ export type User = {
 	groups: string[];
 };
 
+/** A signed-in user with their database row and roles. */
+export type Viewer = User & {
+	/** users.id: what rows reference as ownerId. */
+	id: string;
+	isAdmin: boolean;
+};
+
 export const HEADER_USER = "x-forwarded-user";
 export const HEADER_EMAIL = "x-forwarded-email";
 export const HEADER_USERNAME = "x-forwarded-preferred-username";
 export const HEADER_GROUPS = "x-forwarded-groups";
 
 /** The fixed user every request runs as with AUTH_MODE=dev. */
-export function devUser(requiredGroup: string): User {
+export function devUser(requiredGroup: string, adminGroup: string): User {
 	return {
 		sub: "dev",
 		email: "dev@localhost",
 		username: "dev",
-		groups: [requiredGroup],
+		groups: [requiredGroup, adminGroup],
 	};
 }
 
@@ -64,7 +72,10 @@ export function parseProxyHeaders(headers: Headers): User | null {
 	};
 }
 
-type AuthConfig = Pick<Env, "AUTH_MODE" | "REQUIRED_GROUP" | "NODE_ENV">;
+type AuthConfig = Pick<
+	Env,
+	"AUTH_MODE" | "REQUIRED_GROUP" | "ADMIN_GROUP" | "NODE_ENV"
+>;
 
 /**
  * Pure: resolve the user for a request or throw an ApiError (401 without a
@@ -77,7 +88,7 @@ export function authenticate(headers: Headers, config: AuthConfig): User {
 		if (config.NODE_ENV === "production") {
 			throw new Error("AUTH_MODE=dev is refused when NODE_ENV=production");
 		}
-		return devUser(config.REQUIRED_GROUP);
+		return devUser(config.REQUIRED_GROUP, config.ADMIN_GROUP);
 	}
 	const user = parseProxyHeaders(headers);
 	if (!user) {
@@ -89,7 +100,41 @@ export function authenticate(headers: Headers, config: AuthConfig): User {
 	return user;
 }
 
+/**
+ * The user's row, created on first sign-in and updated when the proxy reports
+ * a new email or username. Reads first so ordinary requests do not write.
+ */
+export async function ensureUserRow(user: User): Promise<string> {
+	const { sub, email, username } = user;
+	const existing = await db().user.findUnique({ where: { sub } });
+	if (existing && existing.email === email && existing.username === username) {
+		return existing.id;
+	}
+	const row = await db().user.upsert({
+		where: { sub },
+		create: { sub, email, username },
+		update: { email, username },
+		select: { id: true },
+	});
+	return row.id;
+}
+
 /** The signed-in user for this request, per the process environment. */
-export function requireUser(request: Request | { headers: Headers }): User {
-	return authenticate(request.headers, env());
+export async function requireUser(
+	request: Request | { headers: Headers },
+): Promise<Viewer> {
+	const config = env();
+	const user = authenticate(request.headers, config);
+	return {
+		...user,
+		id: await ensureUserRow(user),
+		isAdmin: user.groups.includes(config.ADMIN_GROUP),
+	};
+}
+
+/** Category writes and anything else reserved for ADMIN_GROUP. */
+export function requireAdmin(viewer: Viewer): void {
+	if (!viewer.isAdmin) {
+		throw forbidden(`Requires the ${env().ADMIN_GROUP} group`);
+	}
 }

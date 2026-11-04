@@ -9,6 +9,7 @@ describe("parseEnv", () => {
 			NODE_ENV: "development",
 			AUTH_MODE: "proxy",
 			REQUIRED_GROUP: "wardrobe",
+			ADMIN_GROUP: "wardrobe-admin",
 			AWS_REGION: "eu-central-1",
 			PHOTO_BUCKET: "centerpoint-wardrobe-photos",
 			OPENROUTER_VISION_MODEL: DEFAULT_VISION_MODEL,

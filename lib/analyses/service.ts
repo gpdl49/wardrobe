@@ -1,5 +1,11 @@
 import { z } from "zod";
 import {
+	accessToItem,
+	loadAccess,
+	requireEdit,
+	requireRead,
+} from "@/lib/access";
+import {
 	queueColorsAnalysis,
 	queueVisionAnalysis,
 } from "@/lib/analyses/enqueue";
@@ -11,6 +17,7 @@ import {
 	SEASONS,
 } from "@/lib/analyses/schema";
 import type { AnalysisDto, ItemDetailDto } from "@/lib/api/types";
+import type { Viewer } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { analysisEnabled } from "@/lib/env";
 import type { Analysis, Prisma } from "@/lib/generated/prisma/client";
@@ -31,20 +38,35 @@ function parseId(id: string, what: string): string {
 	return parsed.data;
 }
 
-async function requireItem(id: string) {
-	const item = await db().item.findUnique({
+function findItem(id: string) {
+	return db().item.findUnique({
 		where: { id: parseId(id, "Item") },
-		select: { id: true },
+		select: { id: true, ownerId: true, locationId: true },
 	});
+}
+
+/** Analyses follow their item: 404 without access, 403 on view. */
+async function requireEditableItem(viewer: Viewer, id: string) {
+	const ctx = await loadAccess(viewer);
+	const item = await findItem(id);
 	if (!item) {
 		throw notFound("Item not found");
 	}
-	return item;
+	requireEdit(accessToItem(ctx, item), "Item");
+	return { item, ctx };
 }
 
 /** GET /api/items/{id}/analyses: newest first. */
-export async function listAnalyses(itemId: string): Promise<AnalysisDto[]> {
-	const item = await requireItem(itemId);
+export async function listAnalyses(
+	viewer: Viewer,
+	itemId: string,
+): Promise<AnalysisDto[]> {
+	const ctx = await loadAccess(viewer);
+	const item = await findItem(itemId);
+	if (!item) {
+		throw notFound("Item not found");
+	}
+	requireRead(accessToItem(ctx, item), "Item");
 	const rows = await db().analysis.findMany({
 		where: { itemId: item.id },
 		orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -58,10 +80,11 @@ export async function listAnalyses(itemId: string): Promise<AnalysisDto[]> {
  * default to colours, plus vision when it is enabled.
  */
 export async function rerunAnalyses(
+	viewer: Viewer,
 	itemId: string,
 	input: RerunAnalysesInput,
 ): Promise<AnalysisDto[]> {
-	const item = await requireItem(itemId);
+	const { item } = await requireEditableItem(viewer, itemId);
 	const visionEnabled = analysisEnabled();
 	const kinds =
 		input.kinds ?? (visionEnabled ? ["colors", "vision"] : ["colors"]);
@@ -98,11 +121,13 @@ export async function rerunAnalyses(
  * notes.
  */
 export async function applyAnalysis(
+	viewer: Viewer,
 	itemId: string,
 	analysisId: string,
 	input: ApplyAnalysisInput,
 ): Promise<ItemDetailDto> {
-	const id = parseId(itemId, "Item");
+	const { item: target, ctx } = await requireEditableItem(viewer, itemId);
+	const id = target.id;
 	const analysis = await db().analysis.findFirst({
 		where: { id: parseId(analysisId, "Analysis"), itemId: id },
 	});
@@ -158,7 +183,7 @@ export async function applyAnalysis(
 				}
 				case "tags": {
 					if (!suggestion.tags?.length) break;
-					const tagIds = await ensureTags(tx, suggestion.tags);
+					const tagIds = await ensureTags(tx, target.ownerId, suggestion.tags);
 					await tx.itemTag.createMany({
 						data: tagIds.map((tagId) => ({ itemId: id, tagId })),
 						skipDuplicates: true,
@@ -190,5 +215,5 @@ export async function applyAnalysis(
 			include: itemDetailInclude,
 		});
 	});
-	return toItemDetailDto(item);
+	return toItemDetailDto(item, ctx);
 }

@@ -1,9 +1,13 @@
-import { type RouteParams, withAuth } from "@/lib/http/handler";
+import { parseQuery, type RouteParams, withAuth } from "@/lib/http/handler";
+import { locationByCodeQuery } from "@/lib/locations/schema";
 import { getLocationByCode } from "@/lib/locations/service";
 
 export const GET = withAuth<RouteParams<{ code: string }>>(
-	async (_request, { params }) => {
+	async (request, { params }, user) => {
 		const { code } = await params;
-		return Response.json(await getLocationByCode(decodeURIComponent(code)));
+		const { owner } = parseQuery(request, locationByCodeQuery);
+		return Response.json(
+			await getLocationByCode(user, decodeURIComponent(code), owner),
+		);
 	},
 );

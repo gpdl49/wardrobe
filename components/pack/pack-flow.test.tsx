@@ -5,7 +5,12 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PackFlow } from "@/components/pack/pack-flow";
-import type { LocationDetailDto, PackingSessionDto } from "@/lib/api/types";
+import type {
+	LocationDetailDto,
+	MeDto,
+	PackingSessionDto,
+} from "@/lib/api/types";
+import { CurrentUserContext } from "@/lib/client/current-user";
 import { UploadQueueContext } from "@/lib/client/upload";
 import { fakeBackend, json, makeQueue } from "@/lib/client/upload/test-helpers";
 
@@ -16,6 +21,8 @@ vi.mock("next/navigation", () => ({
 const stamp = "2026-11-03T00:00:00.000Z";
 const bag: LocationDetailDto = {
 	id: "bag-7",
+	ownerId: "user-a",
+	access: "owner",
 	kind: "bag",
 	code: "B-07",
 	name: "Bag B-07",
@@ -30,10 +37,21 @@ const bag: LocationDetailDto = {
 };
 const session: PackingSessionDto = {
 	id: "sess-1",
+	ownerId: "user-a",
+	access: "owner",
 	mode: "pack",
 	locationId: bag.id,
 	startedAt: stamp,
 	endedAt: null,
+};
+
+const ME: MeDto = {
+	id: "user-a",
+	sub: "sub-a",
+	email: null,
+	username: "a",
+	groups: ["wardrobe"],
+	isAdmin: false,
 };
 
 let backend: ReturnType<typeof fakeBackend>;
@@ -60,9 +78,11 @@ function setup() {
 	const { queue } = makeQueue();
 	const user = userEvent.setup();
 	render(
-		<UploadQueueContext.Provider value={queue}>
-			<PackFlow initialLocationId={bag.id} />
-		</UploadQueueContext.Provider>,
+		<CurrentUserContext.Provider value={ME}>
+			<UploadQueueContext.Provider value={queue}>
+				<PackFlow initialLocationId={bag.id} />
+			</UploadQueueContext.Provider>
+		</CurrentUserContext.Provider>,
 	);
 	return user;
 }

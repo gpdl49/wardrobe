@@ -13,19 +13,19 @@ import {
 
 type Context = RouteParams<{ id: string }>;
 
-export const GET = withAuth<Context>(async (_request, { params }) => {
+export const GET = withAuth<Context>(async (_request, { params }, user) => {
 	const { id } = await params;
-	return Response.json(await getLocation(id));
+	return Response.json(await getLocation(user, id));
 });
 
-export const PATCH = withAuth<Context>(async (request, { params }) => {
+export const PATCH = withAuth<Context>(async (request, { params }, user) => {
 	const { id } = await params;
 	const input = await parseBody(request, updateLocationSchema);
-	return Response.json(await updateLocation(id, input));
+	return Response.json(await updateLocation(user, id, input));
 });
 
-export const DELETE = withAuth<Context>(async (_request, { params }) => {
+export const DELETE = withAuth<Context>(async (_request, { params }, user) => {
 	const { id } = await params;
-	await deleteLocation(id);
+	await deleteLocation(user, id);
 	return noContent();
 });

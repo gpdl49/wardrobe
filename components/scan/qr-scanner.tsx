@@ -2,7 +2,7 @@
 
 import { Camera, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { parseLabel } from "@/lib/client/qr";
+import { type ParsedLabel, parseLabel } from "@/lib/client/qr";
 import { preloadReader, readQr } from "@/lib/client/zxing";
 
 /** How often a video frame is decoded. */
@@ -12,7 +12,7 @@ const FRAME_EDGE = 720;
 
 type Props = {
 	/** Called once with the location code of a wardrobe label. */
-	onCode: (code: string) => void;
+	onCode: (label: ParsedLabel) => void;
 	onClose: () => void;
 };
 
@@ -33,14 +33,14 @@ export function QrScanner({ onCode, onClose }: Props) {
 
 	const accept = (text: string | null): boolean => {
 		if (!text || done.current) return false;
-		const code = parseLabel(text, [window.location.host]);
-		if (!code) {
+		const label = parseLabel(text, [window.location.host]);
+		if (!label) {
 			setHint("That QR code is not a wardrobe label.");
 			return false;
 		}
 		done.current = true;
 		navigator.vibrate?.(50);
-		onCodeRef.current(code);
+		onCodeRef.current(label);
 		return true;
 	};
 	const acceptRef = useRef(accept);

@@ -55,7 +55,16 @@ const fields = {
 	sessionId: id,
 };
 
-export const createItemSchema = z.strictObject(fields).partial();
+export const createItemSchema = z
+	.strictObject({
+		...fields,
+		/**
+		 * Whose wardrobe it goes in. Default: the location's owner, else the
+		 * caller. Must match the location's owner when both are given.
+		 */
+		ownerId: id,
+	})
+	.partial();
 export type CreateItemInput = z.output<typeof createItemSchema>;
 
 export const updateItemSchema = z
@@ -68,6 +77,8 @@ export const updateItemSchema = z
 export type UpdateItemInput = z.output<typeof updateItemSchema>;
 
 export const listItemsQuery = z.object({
+	/** A user id; whose wardrobe to list. Default: the caller's. */
+	owner: id.optional(),
 	/** Location id or code. */
 	location: z.string().trim().min(1).max(64).optional(),
 	/** Category id or slug; includes its subcategories. */

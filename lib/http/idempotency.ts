@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { User } from "@/lib/auth";
+import type { Viewer } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Prisma } from "@/lib/generated/prisma/client";
 import { ApiError, errorResponse } from "@/lib/http/errors";
@@ -74,7 +74,7 @@ export type IdempotencyOptions = {
 	 * Adjusts a stored response before it is replayed, e.g. to refresh a
 	 * presigned URL that has expired since.
 	 */
-	replay?: (stored: StoredResponse, user: User) => Promise<StoredResponse>;
+	replay?: (stored: StoredResponse, user: Viewer) => Promise<StoredResponse>;
 };
 
 type Claim =

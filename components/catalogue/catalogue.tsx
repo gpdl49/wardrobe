@@ -12,6 +12,7 @@ import Link from "next/link";
 import { ToggleGroup } from "radix-ui";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ItemGrid } from "@/components/items/item-tile";
+import { WardrobeSwitcher } from "@/components/sharing/wardrobe-switcher";
 import { Button, buttonClass } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import {
@@ -66,6 +67,11 @@ export function Catalogue() {
 			</aside>
 
 			<div className="flex min-w-0 flex-1 flex-col gap-4">
+				<WardrobeSwitcher
+					value={filters.owner}
+					// Locations and tags belong to one wardrobe.
+					onChange={(owner) => setFilters({ owner, location: "", tag: "" })}
+				/>
 				<Toolbar
 					filters={filters}
 					setFilters={setFilters}
@@ -90,6 +96,10 @@ export function Catalogue() {
 							}
 						>
 							Try fewer filters or a different search.
+						</EmptyState>
+					) : filters.owner ? (
+						<EmptyState icon={<Shirt />} title="Nothing to show">
+							Nothing has been shared with you in this wardrobe yet.
 						</EmptyState>
 					) : (
 						<EmptyState
@@ -225,7 +235,7 @@ function ActiveFilters({
 	setFilters: (patch: Partial<CatalogueFilters>) => void;
 	clearFilters: () => void;
 }) {
-	const locations = useLocations();
+	const locations = useLocations({ owner: filters.owner || undefined });
 	const categories = useCategories();
 	const chips: Array<{ key: keyof CatalogueFilters; label: string }> = [];
 	if (filters.location) {

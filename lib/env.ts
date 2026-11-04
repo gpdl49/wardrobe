@@ -32,6 +32,7 @@ const envSchema = z
 		DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
 		AUTH_MODE: withDefault(z.enum(["proxy", "dev"]), "proxy"),
 		REQUIRED_GROUP: withDefault(z.string().min(1), "wardrobe"),
+		ADMIN_GROUP: withDefault(z.string().min(1), "wardrobe-admin"),
 		AWS_REGION: withDefault(z.string().min(1), "eu-central-1"),
 		AWS_ACCESS_KEY_ID: optional(z.string()),
 		AWS_SECRET_ACCESS_KEY: optional(z.string()),

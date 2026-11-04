@@ -1,18 +1,24 @@
+import { z } from "zod";
 import { locationCode } from "@/lib/locations/schema";
 
-/** Hosts whose `/l/<code>` URLs are wardrobe labels. */
+/** Hosts whose `/l/<ownerId>/<code>` URLs are wardrobe labels. */
 export const LABEL_HOSTS = ["wardrobe.vidur.xyz"];
 
+/** Whose label it is, and the code. A null owner means the caller's own. */
+export type ParsedLabel = { ownerId: string | null; code: string };
+
+const ownerIdSchema = z.uuid();
+
 /**
- * The location code in a scanned QR payload, or null if it is not a wardrobe
- * label. Labels encode `https://wardrobe.vidur.xyz/l/<code>`; a bare code
- * (`B-07`, typed or from an older label) is accepted too. `extraHosts` lets
- * the current origin (localhost in dev) count as a label host.
+ * The location in a scanned QR payload, or null if it is not a wardrobe label.
+ * Labels encode `https://wardrobe.vidur.xyz/l/<ownerId>/<code>`; a bare code
+ * (`B-07`, typed) is accepted too and means the caller's own wardrobe.
+ * `extraHosts` lets the current origin (localhost in dev) count as a label host.
  */
 export function parseLabel(
 	payload: string,
 	extraHosts: readonly string[] = [],
-): string | null {
+): ParsedLabel | null {
 	const text = payload.trim();
 	if (!text) {
 		return null;
@@ -20,10 +26,14 @@ export function parseLabel(
 	if (/^[a-z][a-z0-9+.-]*:/i.test(text)) {
 		return parseLabelUrl(text, [...LABEL_HOSTS, ...extraHosts]);
 	}
-	return toCode(text);
+	const code = toCode(text);
+	return code ? { ownerId: null, code } : null;
 }
 
-function parseLabelUrl(text: string, hosts: readonly string[]): string | null {
+function parseLabelUrl(
+	text: string,
+	hosts: readonly string[],
+): ParsedLabel | null {
 	let url: URL;
 	try {
 		url = new URL(text);
@@ -36,17 +46,23 @@ function parseLabelUrl(text: string, hosts: readonly string[]): string | null {
 	if (!hosts.includes(url.host)) {
 		return null;
 	}
-	const match = /^\/l\/([^/]+)\/?$/.exec(url.pathname);
-	if (!match?.[1]) {
+	const match = /^\/l\/([^/]+)\/([^/]+)\/?$/.exec(url.pathname);
+	if (!match?.[1] || !match[2]) {
 		return null;
 	}
-	let raw: string;
+	let rawOwner: string;
+	let rawCode: string;
 	try {
-		raw = decodeURIComponent(match[1]);
+		rawOwner = decodeURIComponent(match[1]);
+		rawCode = decodeURIComponent(match[2]);
 	} catch {
 		return null;
 	}
-	return toCode(raw);
+	const owner = ownerIdSchema.safeParse(rawOwner);
+	const code = toCode(rawCode);
+	return owner.success && code
+		? { ownerId: owner.data.toLowerCase(), code }
+		: null;
 }
 
 function toCode(raw: string): string | null {

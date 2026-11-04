@@ -106,6 +106,7 @@ export class UploadQueue {
 		loaded: false,
 	};
 	private authRequired = false;
+	private paused = false;
 	private loading: Promise<void> | null = null;
 	private loaded = false;
 	private wakeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -162,6 +163,23 @@ export class UploadQueue {
 			this.pump();
 		})();
 		return this.loading;
+	}
+
+	/**
+	 * Stops starting work: another user signed in on this device, and requests
+	 * would go out with their session. Jobs stay persisted for `resume`.
+	 */
+	pause() {
+		this.paused = true;
+		if (this.wakeTimer) clearTimeout(this.wakeTimer);
+		this.wakeTimer = null;
+	}
+
+	/** Undoes `pause` (the user is back). */
+	resume() {
+		if (!this.paused) return;
+		this.paused = false;
+		this.pump();
 	}
 
 	/**
@@ -395,7 +413,7 @@ export class UploadQueue {
 	}
 
 	private pump() {
-		if (!this.loaded) return;
+		if (!this.loaded || this.paused) return;
 		if (!this.authRequired) {
 			const now = this.now();
 			for (const job of this.snapshot.jobs) {

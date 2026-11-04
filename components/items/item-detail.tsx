@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/feedback";
 import type { ItemDetailDto, LocationRef } from "@/lib/api/types";
 import { isApiError } from "@/lib/client/api";
+import { useCurrentUser } from "@/lib/client/current-user";
 import {
 	formatDate,
 	formatDateTime,
@@ -66,6 +67,7 @@ function ItemView({ item }: { item: ItemDetailDto }) {
 	const remove = useDeleteItem();
 	const update = useUpdateItem(item.id);
 	const title = itemTitle(item);
+	const canEdit = item.access !== "view";
 	const photos = [...item.photos].sort((a, b) =>
 		a.id === item.coverPhoto?.id
 			? -1
@@ -90,25 +92,31 @@ function ItemView({ item }: { item: ItemDetailDto }) {
 				<h1 className="min-w-0 flex-1 truncate text-2xl font-semibold tracking-tight">
 					{title}
 				</h1>
-				{!editing ? (
+				{canEdit && !editing ? (
 					<Button onClick={() => setEditing(true)}>
 						<Pencil />
 						<span className="max-sm:sr-only">Edit</span>
 					</Button>
 				) : null}
-				<ConfirmDialog
-					title={`Delete ${title}?`}
-					description="The item, its photos and its history are deleted. This cannot be undone."
-					onConfirm={async () => {
-						await remove.mutateAsync(item.id);
-						router.replace("/");
-					}}
-					trigger={
-						<Button variant="danger-ghost" size="icon" aria-label="Delete item">
-							<Trash2 />
-						</Button>
-					}
-				/>
+				{canEdit ? (
+					<ConfirmDialog
+						title={`Delete ${title}?`}
+						description="The item, its photos and its history are deleted. This cannot be undone."
+						onConfirm={async () => {
+							await remove.mutateAsync(item.id);
+							router.replace("/");
+						}}
+						trigger={
+							<Button
+								variant="danger-ghost"
+								size="icon"
+								aria-label="Delete item"
+							>
+								<Trash2 />
+							</Button>
+						}
+					/>
+				) : null}
 			</div>
 
 			<div className="grid gap-6 md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:gap-8">
@@ -117,12 +125,16 @@ function ItemView({ item }: { item: ItemDetailDto }) {
 						photos={photos}
 						alt={title}
 						coverPhotoId={item.coverPhoto?.id}
-						onSetCover={(coverPhotoId) => update.mutate({ coverPhotoId })}
+						onSetCover={
+							canEdit
+								? (coverPhotoId) => update.mutate({ coverPhotoId })
+								: undefined
+						}
 					/>
 					<ErrorText error={update.error} className="mt-2" />
 				</div>
 				<div className="flex min-w-0 flex-col gap-6">
-					{editing ? (
+					{canEdit && editing ? (
 						<section
 							aria-label="Edit item"
 							className="rounded-card border border-line bg-surface p-4"
@@ -151,7 +163,21 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 
 const none = <span className="text-faint">—</span>;
 
+/** Tags are per wardrobe: a shared item's tag filters that wardrobe. */
+export function tagHref(
+	item: Pick<ItemDetailDto, "ownerId">,
+	tag: string,
+	viewerId: string | undefined,
+) {
+	const owner =
+		item.ownerId === viewerId
+			? ""
+			: `owner=${encodeURIComponent(item.ownerId)}&`;
+	return `/?${owner}tag=${encodeURIComponent(tag)}`;
+}
+
 function Details({ item }: { item: ItemDetailDto }) {
+	const me = useCurrentUser();
 	const categories = useCategories();
 	const category = item.category
 		? (categories.flat.find((c) => c.id === item.category?.id)?.path ??
@@ -213,7 +239,7 @@ function Details({ item }: { item: ItemDetailDto }) {
 							{item.tags.map((t) => (
 								<Link
 									key={t}
-									href={`/?tag=${encodeURIComponent(t)}`}
+									href={tagHref(item, t, me?.id)}
 									className="rounded-full bg-accent-soft px-2.5 py-0.5 text-accent hover:underline"
 								>
 									{t}

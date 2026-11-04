@@ -14,6 +14,7 @@ import {
 	saveActiveSession,
 } from "@/lib/client/active-session";
 import { api } from "@/lib/client/api";
+import { useCurrentUser } from "@/lib/client/current-user";
 import { useQueueSnapshot, useUploadQueue } from "@/lib/client/upload";
 
 type Phase =
@@ -30,7 +31,7 @@ type Phase =
 	| { name: "summary"; active: ActiveSession; endError?: string };
 
 type Props = {
-	/** From /pack?location=<id> (e.g. /l/<code>?then=pack). */
+	/** From /pack?location=<id> (e.g. /l/<ownerId>/<code>?then=pack). */
 	initialLocationId?: string;
 	/** From /pack?code=<code>: a label that is not set up yet. */
 	initialCode?: string;
@@ -44,7 +45,20 @@ const ref = ({ id, kind, code, name }: LocationRef): LocationRef => ({
 });
 
 /** /pack: choose a location → session → capture loop → summary. */
-export function PackFlow({ initialLocationId, initialCode }: Props) {
+export function PackFlow(props: Props) {
+	const me = useCurrentUser();
+	if (!me) {
+		return <p className="text-neutral-500">Loading…</p>;
+	}
+	// A different user starts over, with their own session and queue.
+	return <PackFlowFor key={me.id} userId={me.id} {...props} />;
+}
+
+function PackFlowFor({
+	userId,
+	initialLocationId,
+	initialCode,
+}: Props & { userId: string }) {
 	const [phase, setPhase] = useState<Phase>({ name: "loading" });
 	const router = useRouter();
 
@@ -61,18 +75,18 @@ export function PackFlow({ initialLocationId, initialCode }: Props) {
 					idempotencyKey: key,
 				});
 				const active = { session, location: ref(location) };
-				saveActiveSession("pack", active);
+				saveActiveSession(userId, "pack", active);
 				setPhase({ name: "capture", active });
 			} catch (err) {
 				setPhase({ name: "starting", location, key, error: errorMessage(err) });
 			}
 		},
-		[],
+		[userId],
 	);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: decide the first phase once
 	useEffect(() => {
-		const active = loadActiveSession("pack");
+		const active = loadActiveSession(userId, "pack");
 		if (!initialLocationId) {
 			setPhase(active ? { name: "capture", active } : { name: "choose" });
 			return;
@@ -84,10 +98,17 @@ export function PackFlow({ initialLocationId, initialCode }: Props) {
 		api.locations
 			.get(initialLocationId)
 			.then(async (location) => {
+				if (location.access === "view") {
+					setPhase({
+						name: "choose",
+						error: `You have view access to ${location.code}.`,
+					});
+					return;
+				}
 				if (active) {
 					// Scanned a different bag: close the old session first.
 					await api.sessions.end(active.session.id).catch(() => undefined);
-					clearActiveSession("pack");
+					clearActiveSession(userId, "pack");
 				}
 				await start(location);
 			})
@@ -95,7 +116,7 @@ export function PackFlow({ initialLocationId, initialCode }: Props) {
 	}, []);
 
 	const end = async (active: ActiveSession) => {
-		clearActiveSession("pack");
+		clearActiveSession(userId, "pack");
 		try {
 			await api.sessions.end(active.session.id);
 			setPhase({ name: "summary", active });

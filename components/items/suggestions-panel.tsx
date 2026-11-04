@@ -87,6 +87,7 @@ const KIND_LABELS: Record<AnalysisDto["kind"], string> = {
 
 export function SuggestionsPanel({ item }: { item: ItemDetailDto }) {
 	const rerun = useRerunAnalysis(item.id);
+	const canEdit = item.access !== "view";
 	const running = item.analyses.some(
 		(a) => a.status === "queued" || a.status === "running",
 	);
@@ -106,15 +107,17 @@ export function SuggestionsPanel({ item }: { item: ItemDetailDto }) {
 					<Sparkles aria-hidden className="size-4 text-accent" />
 					Suggestions
 				</h2>
-				<Button
-					variant="ghost"
-					size="sm"
-					disabled={rerun.isPending || running}
-					onClick={() => rerun.mutate()}
-				>
-					<RefreshCw className={running ? "animate-spin" : undefined} />
-					{running ? "Analysing…" : "Re-run analysis"}
-				</Button>
+				{canEdit ? (
+					<Button
+						variant="ghost"
+						size="sm"
+						disabled={rerun.isPending || running}
+						onClick={() => rerun.mutate()}
+					>
+						<RefreshCw className={running ? "animate-spin" : undefined} />
+						{running ? "Analysing…" : "Re-run analysis"}
+					</Button>
+				) : null}
 			</header>
 			{rerun.error ? (
 				<ErrorText
@@ -151,6 +154,7 @@ function AnalysisCard({
 	analysis: AnalysisDto;
 }) {
 	const apply = useApplySuggestion(item.id);
+	const canEdit = item.access !== "view";
 	const categories = useCategories();
 	const [pending, setPending] = useState<SuggestionField[]>([]);
 	const result = analysis.result;
@@ -238,7 +242,7 @@ function AnalysisCard({
 									>
 										<Check aria-label={`${label} matches`} className="size-4" />
 									</span>
-								) : (
+								) : canEdit ? (
 									<Button
 										size="sm"
 										variant="ghost"
@@ -249,14 +253,14 @@ function AnalysisCard({
 									>
 										{pending.includes(field) ? <Spinner /> : "Accept"}
 									</Button>
-								)}
+								) : null}
 							</div>
 						);
 					})}
 				</dl>
 			) : null}
 			<ErrorText error={apply.error} />
-			{open.length > 1 ? (
+			{canEdit && open.length > 1 ? (
 				<Button
 					variant="secondary"
 					size="sm"

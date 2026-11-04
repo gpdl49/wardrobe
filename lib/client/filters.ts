@@ -5,10 +5,12 @@ import { ITEM_STATUSES, SEASONS } from "./labels";
 /**
  * Catalogue state in the URL query string, so a filtered view can be
  * bookmarked, shared and survives back/forward:
- * `/?location=…&category=…&tag=…&season=…&status=…&color=…&q=…&view=list&group=location`.
+ * `/?owner=…&location=…&category=…&tag=…&season=…&status=…&color=…&q=…&view=list&group=location`.
  * The item filters use the same names as GET /api/items.
  */
 export interface CatalogueFilters {
+	/** Whose wardrobe (a user id); empty is the caller's own. */
+	owner: string;
 	q: string;
 	location: string;
 	category: string;
@@ -21,6 +23,7 @@ export interface CatalogueFilters {
 }
 
 export const DEFAULT_FILTERS: CatalogueFilters = {
+	owner: "",
 	q: "",
 	location: "",
 	category: "",
@@ -32,7 +35,7 @@ export const DEFAULT_FILTERS: CatalogueFilters = {
 	group: "none",
 };
 
-/** The keys that narrow the item list (as opposed to presentation). */
+/** The keys that narrow the item list (not presentation, or whose wardrobe). */
 export const ITEM_FILTER_KEYS = [
 	"location",
 	"category",
@@ -56,6 +59,7 @@ export function parseFilters(params: ParamsLike): CatalogueFilters {
 	const view = params.get("view");
 	const group = params.get("group");
 	return {
+		owner: text("owner"),
 		q: text("q"),
 		location: text("location"),
 		category: text("category"),
@@ -85,6 +89,7 @@ export function serializeFilters(filters: CatalogueFilters): string {
 /** GET /api/items query for the current filters. */
 export function toItemsQuery(filters: CatalogueFilters): ItemsQuery {
 	const query: ItemsQuery = {};
+	if (filters.owner) query.owner = filters.owner;
 	if (filters.q) query.q = filters.q;
 	if (filters.location) query.location = filters.location;
 	if (filters.category) query.category = filters.category;

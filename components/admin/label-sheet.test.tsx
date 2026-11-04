@@ -14,16 +14,18 @@ const locations = Array.from({ length: 26 }, (_, i) =>
 );
 
 describe("label sheet", () => {
-	it("encodes the public /l/<code> URL", () => {
-		expect(labelUrl("CL-BEDROOM")).toBe(
-			"https://wardrobe.vidur.xyz/l/CL-BEDROOM",
+	it("encodes the public /l/<ownerId>/<code> URL", () => {
+		expect(labelUrl("owner-1", "CL-BEDROOM")).toBe(
+			"https://wardrobe.vidur.xyz/l/owner-1/CL-BEDROOM",
 		);
 	});
 
 	it("draws a QR code with a quiet zone", () => {
-		const { d, size } = qrPath(labelUrl("B-07"));
-		// Version 3 (29 modules) for this URL at ECC M, plus 2 modules each side.
-		expect(size).toBe(33);
+		const { d, size } = qrPath(
+			labelUrl("019a0000-0000-7000-8000-000000000001", "B-07"),
+		);
+		// Version 5 (37 modules) for this URL at ECC M, plus 2 modules each side.
+		expect(size).toBe(41);
 		expect(d.startsWith("M2 2h1v1h-1z")).toBe(true);
 	});
 
@@ -50,7 +52,7 @@ describe("label sheet", () => {
 		expect(within(first).getByText("Winter jumpers")).toBeInTheDocument();
 		expect(
 			within(first).getByRole("img", {
-				name: "QR code for https://wardrobe.vidur.xyz/l/B-01",
+				name: "QR code for https://wardrobe.vidur.xyz/l/user-1/B-01",
 			}),
 		).toBeInTheDocument();
 		// The name is not repeated when it is just the code.

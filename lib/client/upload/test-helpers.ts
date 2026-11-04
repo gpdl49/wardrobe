@@ -34,6 +34,8 @@ export function photoDto(
 ): PhotoDto {
 	return {
 		id,
+		ownerId: "owner-1",
+		access: "owner",
 		itemId: null,
 		kind: "main",
 		status: "pending",
@@ -58,6 +60,8 @@ export function itemDto(
 ): ItemSummaryDto {
 	return {
 		id,
+		ownerId: "owner-1",
+		access: "owner",
 		name: null,
 		category: null,
 		brand: null,

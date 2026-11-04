@@ -141,8 +141,8 @@ export function ItemForm({
 	const [state, setState] = useState(initial);
 	const update = useUpdateItem(item.id);
 	const categories = useCategories();
-	const locations = useLocations();
-	const tags = useTags();
+	const locations = useLocations({ owner: item.ownerId });
+	const tags = useTags(item.ownerId);
 	const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
 		setState((s) => ({ ...s, [key]: value }));
 

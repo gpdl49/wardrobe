@@ -9,19 +9,19 @@ import { deleteItem, getItem, updateItem } from "@/lib/items/service";
 
 type Context = RouteParams<{ id: string }>;
 
-export const GET = withAuth<Context>(async (_request, { params }) => {
+export const GET = withAuth<Context>(async (_request, { params }, user) => {
 	const { id } = await params;
-	return Response.json(await getItem(id));
+	return Response.json(await getItem(user, id));
 });
 
-export const PATCH = withAuth<Context>(async (request, { params }) => {
+export const PATCH = withAuth<Context>(async (request, { params }, user) => {
 	const { id } = await params;
 	const input = await parseBody(request, updateItemSchema);
-	return Response.json(await updateItem(id, input));
+	return Response.json(await updateItem(user, id, input));
 });
 
-export const DELETE = withAuth<Context>(async (_request, { params }) => {
+export const DELETE = withAuth<Context>(async (_request, { params }, user) => {
 	const { id } = await params;
-	await deleteItem(id);
+	await deleteItem(user, id);
 	return noContent();
 });

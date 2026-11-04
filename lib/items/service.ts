@@ -1,4 +1,14 @@
 import { z } from "zod";
+import {
+	type AccessContext,
+	accessToItem,
+	accessToLocation,
+	accessToWardrobe,
+	loadAccess,
+	readableItems,
+	requireEdit,
+	requireRead,
+} from "@/lib/access";
 import type {
 	ItemDetailDto,
 	ItemListDto,
@@ -6,10 +16,16 @@ import type {
 	ItemSummaryDto,
 	LocationKind,
 } from "@/lib/api/types";
+import type { Viewer } from "@/lib/auth";
 import { categoryWithDescendants } from "@/lib/categories/service";
 import { db } from "@/lib/db";
 import type { Prisma } from "@/lib/generated/prisma/client";
-import { conflict, notFound, unprocessable } from "@/lib/http/errors";
+import {
+	conflict,
+	forbidden,
+	notFound,
+	unprocessable,
+} from "@/lib/http/errors";
 import {
 	itemDetailInclude,
 	itemSummaryInclude,
@@ -35,6 +51,10 @@ import { ensureTags } from "@/lib/tags/service";
  * Items: data access and rules. Every change of Item.locationId writes a
  * Movement in the same transaction, and applies the status rule in
  * lib/items/rules.ts unless the request sets `status` itself.
+ *
+ * Access follows lib/access. References in a body that the caller cannot read
+ * are a 422, the same as if they did not exist, so nothing is disclosed. Items
+ * never change owner: a move stays inside one wardrobe.
  */
 
 type Tx = Prisma.TransactionClient;
@@ -52,18 +72,24 @@ function parseId(id: string): string {
 /** Matches nothing: a filter value that names no row. */
 const NONE: Prisma.ItemWhereInput = { id: { in: [] } };
 
-async function locationFilter(value: string): Promise<Prisma.ItemWhereInput> {
+/** Codes are unique per owner, so a code is looked up in that wardrobe. */
+function locationFilter(value: string, ownerId: string): Prisma.ItemWhereInput {
 	if (uuid.safeParse(value).success) {
 		return { locationId: value };
 	}
 	const code = locationCode.safeParse(value);
-	return code.success ? { location: { code: code.data } } : NONE;
+	return code.success ? { location: { ownerId, code: code.data } } : NONE;
 }
 
-export async function listItems(query: ListItemsQuery): Promise<ItemListDto> {
-	const and: Prisma.ItemWhereInput[] = [];
+export async function listItems(
+	viewer: Viewer,
+	query: ListItemsQuery,
+): Promise<ItemListDto> {
+	const ctx = await loadAccess(viewer);
+	const ownerId = query.owner ?? viewer.id;
+	const and: Prisma.ItemWhereInput[] = [readableItems(ctx, ownerId)];
 	if (query.location) {
-		and.push(await locationFilter(query.location));
+		and.push(locationFilter(query.location, ownerId));
 	}
 	if (query.category) {
 		const ids = await categoryWithDescendants(query.category);
@@ -113,12 +139,16 @@ export async function listItems(query: ListItemsQuery): Promise<ItemListDto> {
 	const page = rows.slice(0, query.limit);
 	const last = page.at(-1);
 	return {
-		items: page.map(toItemSummaryDto),
+		items: page.map((item) => toItemSummaryDto(item, ctx)),
 		nextCursor: rows.length > query.limit && last ? encodeCursor(last) : null,
 	};
 }
 
-export async function getItem(id: string): Promise<ItemDetailDto> {
+export async function getItem(
+	viewer: Viewer,
+	id: string,
+): Promise<ItemDetailDto> {
+	const ctx = await loadAccess(viewer);
 	const item = await db().item.findUnique({
 		where: { id: parseId(id) },
 		include: itemDetailInclude,
@@ -126,27 +156,50 @@ export async function getItem(id: string): Promise<ItemDetailDto> {
 	if (!item) {
 		throw notFound("Item not found");
 	}
-	return toItemDetailDto(item);
+	requireRead(accessToItem(ctx, item), "Item");
+	return toItemDetailDto(item, ctx);
 }
 
-async function summary(tx: Tx, id: string): Promise<ItemSummaryDto> {
+async function summary(
+	tx: Tx,
+	id: string,
+	ctx: AccessContext,
+): Promise<ItemSummaryDto> {
 	return toItemSummaryDto(
 		await tx.item.findUniqueOrThrow({
 			where: { id },
 			include: itemSummaryInclude,
 		}),
+		ctx,
 	);
 }
 
-async function locationKind(tx: Tx, id: string): Promise<LocationKind> {
+/** A location named in a body: 422 if the caller cannot read it, 403 on view. */
+async function editableLocation(tx: Tx, ctx: AccessContext, id: string) {
 	const location = await tx.location.findUnique({
 		where: { id },
-		select: { kind: true },
+		select: { id: true, ownerId: true, kind: true },
 	});
-	if (!location) {
+	const access = location && accessToLocation(ctx, location);
+	if (!location || !access) {
 		throw unprocessable("Location does not exist");
 	}
-	return location.kind;
+	requireEdit(access, "Location");
+	return location;
+}
+
+function assertSameOwner(locationOwnerId: string, itemOwnerId: string) {
+	if (locationOwnerId !== itemOwnerId) {
+		throw unprocessable("An item cannot move between wardrobes");
+	}
+}
+
+/** Unplacing an item leaves every location share, so it needs the wardrobe. */
+function assertCanUnplace(ctx: AccessContext, ownerId: string) {
+	const access = accessToWardrobe(ctx, ownerId);
+	if (access !== "owner" && access !== "edit") {
+		throw forbidden("Only the owner or a wardrobe editor can unplace an item");
+	}
 }
 
 async function assertCategory(tx: Tx, id: string) {
@@ -159,22 +212,45 @@ async function assertCategory(tx: Tx, id: string) {
 	}
 }
 
-/** The session must exist (422) and still be open (409). */
-async function assertOpenSession(tx: Tx, id: string) {
+/**
+ * The session must exist and be readable (422), be editable (403), belong to
+ * the wardrobe of the items it records (422) and still be open (409).
+ */
+async function assertOpenSession(
+	tx: Tx,
+	ctx: AccessContext,
+	id: string,
+	itemOwnerIds: Iterable<string>,
+) {
 	const session = await tx.packingSession.findUnique({
 		where: { id },
-		select: { endedAt: true },
+		select: { endedAt: true, ownerId: true, locationId: true },
 	});
-	if (!session) {
+	const access =
+		session &&
+		accessToLocation(ctx, { id: session.locationId, ownerId: session.ownerId });
+	if (!session || !access) {
 		throw unprocessable("Packing session does not exist");
+	}
+	requireEdit(access, "Packing session");
+	for (const ownerId of itemOwnerIds) {
+		if (ownerId !== session.ownerId) {
+			throw unprocessable("The packing session is in another wardrobe");
+		}
 	}
 	if (session.endedAt) {
 		throw conflict("Packing session has ended");
 	}
 }
 
-async function setTags(tx: Tx, itemId: string, names: string[]) {
-	const tagIds = await ensureTags(tx, names);
+/** Tags belong to the item's owner, whoever is editing it. */
+async function setTags(
+	tx: Tx,
+	ownerId: string,
+	itemId: string,
+	names: string[],
+) {
+	const tagIds = await ensureTags(tx, ownerId, names);
 	await tx.itemTag.deleteMany({ where: { itemId } });
 	if (tagIds.length > 0) {
 		await tx.itemTag.createMany({
@@ -200,23 +276,33 @@ function columns(input: CreateItemInput | UpdateItemInput) {
 }
 
 export async function createItem(
+	viewer: Viewer,
 	input: CreateItemInput,
 ): Promise<ItemSummaryDto> {
+	const ctx = await loadAccess(viewer);
 	return db().$transaction(async (tx) => {
 		if (input.categoryId) {
 			await assertCategory(tx, input.categoryId);
 		}
-		if (input.sessionId) {
-			await assertOpenSession(tx, input.sessionId);
-		}
 		let status: ItemStatus | undefined = input.status;
+		let ownerId = input.ownerId ?? viewer.id;
 		if (input.locationId) {
-			const kind = await locationKind(tx, input.locationId);
-			status ??= statusForLocationKind(kind) ?? undefined;
+			const location = await editableLocation(tx, ctx, input.locationId);
+			if (input.ownerId && input.ownerId !== location.ownerId) {
+				throw unprocessable("The location is in another wardrobe");
+			}
+			ownerId = location.ownerId;
+			status ??= statusForLocationKind(location.kind) ?? undefined;
+		} else {
+			requireEdit(accessToWardrobe(ctx, ownerId), "Wardrobe");
+		}
+		if (input.sessionId) {
+			await assertOpenSession(tx, ctx, input.sessionId, [ownerId]);
 		}
 		const item = await tx.item.create({
 			data: {
 				...columns(input),
+				ownerId,
 				status,
 				locationId: input.locationId ?? null,
 			},
@@ -234,25 +320,28 @@ export async function createItem(
 			});
 		}
 		if (input.tags) {
-			await setTags(tx, item.id, input.tags);
+			await setTags(tx, ownerId, item.id, input.tags);
 		}
-		return summary(tx, item.id);
+		return summary(tx, item.id, ctx);
 	});
 }
 
 export async function updateItem(
+	viewer: Viewer,
 	id: string,
 	input: UpdateItemInput,
 ): Promise<ItemSummaryDto> {
 	const itemId = parseId(id);
+	const ctx = await loadAccess(viewer);
 	return db().$transaction(async (tx) => {
 		const existing = await tx.item.findUnique({
 			where: { id: itemId },
-			select: { locationId: true },
+			select: { ownerId: true, locationId: true },
 		});
 		if (!existing) {
 			throw notFound("Item not found");
 		}
+		requireEdit(accessToItem(ctx, existing), "Item");
 		if (input.categoryId) {
 			await assertCategory(tx, input.categoryId);
 		}
@@ -271,11 +360,16 @@ export async function updateItem(
 			input.locationId !== existing.locationId;
 		if (moving) {
 			if (input.sessionId) {
-				await assertOpenSession(tx, input.sessionId);
+				await assertOpenSession(tx, ctx, input.sessionId, [existing.ownerId]);
 			}
-			const kind = input.locationId
-				? await locationKind(tx, input.locationId)
-				: null;
+			let kind: LocationKind | null = null;
+			if (input.locationId) {
+				const target = await editableLocation(tx, ctx, input.locationId);
+				assertSameOwner(target.ownerId, existing.ownerId);
+				kind = target.kind;
+			} else {
+				assertCanUnplace(ctx, existing.ownerId);
+			}
 			status ??= statusForLocationKind(kind) ?? undefined;
 			await tx.movement.create({
 				data: {
@@ -296,9 +390,9 @@ export async function updateItem(
 			},
 		});
 		if (input.tags) {
-			await setTags(tx, itemId, input.tags);
+			await setTags(tx, existing.ownerId, itemId, input.tags);
 		}
-		return summary(tx, itemId);
+		return summary(tx, itemId, ctx);
 	});
 }
 
@@ -308,16 +402,22 @@ export async function updateItem(
  * leaves rows pointing at missing objects; an S3 failure after that only
  * orphans objects (logged, the request still succeeds).
  */
-export async function deleteItem(id: string): Promise<void> {
+export async function deleteItem(viewer: Viewer, id: string): Promise<void> {
 	const itemId = parseId(id);
+	const ctx = await loadAccess(viewer);
 	const photos = await db().$transaction(async (tx) => {
 		const item = await tx.item.findUnique({
 			where: { id: itemId },
-			select: { photos: { select: { id: true } } },
+			select: {
+				ownerId: true,
+				locationId: true,
+				photos: { select: { id: true } },
+			},
 		});
 		if (!item) {
 			throw notFound("Item not found");
 		}
+		requireEdit(accessToItem(ctx, item), "Item");
 		await tx.item.delete({ where: { id: itemId } });
 		return item.photos;
 	});
@@ -337,27 +437,43 @@ export async function deleteItem(id: string): Promise<void> {
 
 /**
  * Moves items in one transaction. Items already at the target are left alone
- * (no Movement, not counted). Unknown items, location or session are a 422; an
- * ended session is a 409.
+ * (no Movement, not counted). Unknown or unreadable items, location or session
+ * are a 422; view access to any of them is a 403; an ended session is a 409.
  */
 export async function moveItems(
+	viewer: Viewer,
 	input: MoveItemsInput,
 ): Promise<{ moved: number }> {
+	const ctx = await loadAccess(viewer);
 	return db().$transaction(async (tx) => {
-		if (input.sessionId) {
-			await assertOpenSession(tx, input.sessionId);
-		}
-		const kind = input.toLocationId
-			? await locationKind(tx, input.toLocationId)
+		const target = input.toLocationId
+			? await editableLocation(tx, ctx, input.toLocationId)
 			: null;
-		const items = await tx.item.findMany({
+		const rows = await tx.item.findMany({
 			where: { id: { in: input.itemIds } },
-			select: { id: true, locationId: true },
+			select: { id: true, ownerId: true, locationId: true },
 		});
+		const items = rows.filter((item) => accessToItem(ctx, item));
 		if (items.length !== input.itemIds.length) {
 			const found = new Set(items.map((i) => i.id));
 			const missing = input.itemIds.filter((i) => !found.has(i));
 			throw unprocessable(`Unknown item(s): ${missing.join(", ")}`);
+		}
+		for (const item of items) {
+			requireEdit(accessToItem(ctx, item), "Item");
+			if (target) {
+				assertSameOwner(target.ownerId, item.ownerId);
+			} else if (item.locationId) {
+				assertCanUnplace(ctx, item.ownerId);
+			}
+		}
+		if (input.sessionId) {
+			await assertOpenSession(
+				tx,
+				ctx,
+				input.sessionId,
+				new Set(items.map((i) => i.ownerId)),
+			);
 		}
 		const changing = items.filter((i) => i.locationId !== input.toLocationId);
 		if (changing.length === 0) {
@@ -377,7 +493,7 @@ export async function moveItems(
 			where: { id: { in: changing.map((i) => i.id) } },
 			data: {
 				locationId: input.toLocationId,
-				status: statusForLocationKind(kind) ?? undefined,
+				status: statusForLocationKind(target?.kind ?? null) ?? undefined,
 			},
 		});
 		return { moved: changing.length };

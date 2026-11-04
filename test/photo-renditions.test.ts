@@ -11,10 +11,12 @@ import { pngImage, rotatedExifJpeg } from "@/test/fixtures/images";
 import { describeWithDb, resetDb } from "@/test/helpers/db";
 import { makeItem } from "@/test/helpers/fixtures";
 import { type FakeS3, installFakeS3 } from "@/test/helpers/s3";
+import { userId } from "@/test/helpers/users";
 
 async function makePhoto(data: Partial<Prisma.PhotoUncheckedCreateInput> = {}) {
 	return db().photo.create({
 		data: {
+			ownerId: await userId(),
 			kind: "main",
 			contentType: "image/jpeg",
 			size: 1,

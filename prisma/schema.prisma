@@ -86,14 +86,68 @@ enum AnalysisStatus {
   @@map("analysis_status")
 }
 
+enum ShareAccess {
+  view
+  edit
+
+  @@map("share_access")
+}
+
+/// A signed-in person, created or updated from the oauth2-proxy headers on
+/// sign-in (lib/auth). Everything except categories belongs to one owner.
+model User {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  /// Zitadel subject (X-Forwarded-User).
+  sub       String   @unique @db.VarChar(255)
+  email     String?  @db.VarChar(320)
+  username  String?  @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  locations      Location[]
+  tags           Tag[]
+  items          Item[]
+  photos         Photo[]
+  sessions       PackingSession[]
+  sharesOwned    Share[]          @relation("ShareOwner")
+  sharesReceived Share[]          @relation("ShareGrantee")
+
+  @@index([email])
+  @@index([username])
+  @@map("users")
+}
+
+/// Grants another user access to an owner's whole wardrobe (null locationId)
+/// or to one location and everything nested in it. A second, partial unique
+/// index in the migration covers the null case, which @@unique cannot.
+model Share {
+  id         String      @id @default(uuid(7)) @db.Uuid
+  ownerId    String      @map("owner_id") @db.Uuid
+  owner      User        @relation("ShareOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  granteeId  String      @map("grantee_id") @db.Uuid
+  grantee    User        @relation("ShareGrantee", fields: [granteeId], references: [id], onDelete: Cascade)
+  access     ShareAccess
+  locationId String?     @map("location_id") @db.Uuid
+  location   Location?   @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([ownerId, granteeId, locationId])
+  @@index([granteeId])
+  @@index([locationId])
+  @@map("shares")
+}
+
 /// A place an item can be: a numbered vacuum bag, a suitcase, a closet...
 /// Locations nest (a bag stored in the loft closet).
 model Location {
   id         String       @id @default(uuid(7)) @db.Uuid
+  ownerId    String       @map("owner_id") @db.Uuid
+  owner      User         @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   kind       LocationKind
-  /// Unique, upper-case label code (B-07, S-02, CL-BEDROOM). QR labels encode
-  /// https://wardrobe.vidur.xyz/l/<code>.
-  code       String       @unique @db.VarChar(32)
+  /// Upper-case label code (B-07, S-02, CL-BEDROOM), unique per owner. QR
+  /// labels encode https://wardrobe.vidur.xyz/l/<ownerId>/<code>.
+  code       String       @db.VarChar(32)
   name       String       @db.VarChar(200)
   notes      String?
   parentId   String?      @map("parent_id") @db.Uuid
@@ -108,7 +162,9 @@ model Location {
   sessions      PackingSession[]
   movementsFrom Movement[]       @relation("MovementFrom")
   movementsTo   Movement[]       @relation("MovementTo")
+  shares        Share[]
 
+  @@unique([ownerId, code])
   @@index([parentId])
   @@index([kind])
   @@map("locations")
@@ -134,16 +190,21 @@ model Category {
 }
 
 model Tag {
-  id    String    @id @default(uuid(7)) @db.Uuid
-  /// Unique, lower-case.
-  name  String    @unique @db.VarChar(64)
-  items ItemTag[]
+  id      String    @id @default(uuid(7)) @db.Uuid
+  ownerId String    @map("owner_id") @db.Uuid
+  owner   User      @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  /// Lower-case, unique per owner.
+  name    String    @db.VarChar(64)
+  items   ItemTag[]
 
+  @@unique([ownerId, name])
   @@map("tags")
 }
 
 model Item {
   id           String     @id @default(uuid(7)) @db.Uuid
+  ownerId      String     @map("owner_id") @db.Uuid
+  owner        User       @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   /// Optional: rapid packing capture creates nameless items.
   name         String?    @db.VarChar(200)
   categoryId   String?    @map("category_id") @db.Uuid
@@ -169,6 +230,7 @@ model Item {
   movements Movement[]
   analyses  Analysis[]
 
+  @@index([ownerId, createdAt, id])
   @@index([locationId])
   @@index([categoryId])
   @@index([status])
@@ -190,8 +252,13 @@ model ItemTag {
 /// Object keys: photos/<id>/original, photos/<id>/display.webp,
 /// photos/<id>/thumb.webp (lib/s3). Deleting rows does not delete objects;
 /// the API deletes the objects.
+///
+/// An unassigned photo belongs to its uploader; assigning it to an item passes
+/// it to that item's owner.
 model Photo {
   id          String      @id @default(uuid(7)) @db.Uuid
+  ownerId     String      @map("owner_id") @db.Uuid
+  owner       User        @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   /// Null while a packing capture is unassigned.
   itemId      String?     @map("item_id") @db.Uuid
   item        Item?       @relation("ItemPhotos", fields: [itemId], references: [id], onDelete: Cascade)
@@ -209,6 +276,7 @@ model Photo {
   coverOf  Item?      @relation("ItemCoverPhoto")
   analyses Analysis[]
 
+  @@index([ownerId])
   @@index([itemId])
   @@index([status])
   @@map("photos")
@@ -216,6 +284,8 @@ model Photo {
 
 model PackingSession {
   id         String      @id @default(uuid(7)) @db.Uuid
+  ownerId    String      @map("owner_id") @db.Uuid
+  owner      User        @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   mode       SessionMode
   locationId String      @map("location_id") @db.Uuid
   location   Location    @relation(fields: [locationId], references: [id], onDelete: Cascade)
@@ -224,6 +294,7 @@ model PackingSession {
 
   movements Movement[]
 
+  @@index([ownerId])
   @@index([locationId])
   @@map("packing_sessions")
 }
