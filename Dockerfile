@@ -5,33 +5,39 @@
 # writes anywhere else at runtime.
 
 FROM node:24-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS base
-ENV PNPM_HOME="/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
+ARG AUBE_VERSION=2.9.0
 ENV NEXT_TELEMETRY_DISABLED=1
-# Corepack runs pnpm 11+ (pure ESM) only from 0.34.5, bundled since Node 24.12.
-RUN corepack enable
+RUN apk add --no-cache curl \
+  && arch="$(uname -m)" \
+  && case "$arch" in \
+    x86_64) target=x86_64-unknown-linux-musl ;; \
+    aarch64) target=aarch64-unknown-linux-musl ;; \
+    *) echo "unsupported arch: $arch" >&2; exit 1 ;; \
+  esac \
+  && curl -fsSL "https://github.com/aubepkg/aube/releases/download/v${AUBE_VERSION}/aube-v${AUBE_VERSION}-${target}.tar.gz" \
+  | tar -xz -C /usr/local/bin aube aubr aubx
 
 # All dependencies, for the build. postinstall runs `prisma generate`.
 FROM base AS deps
 WORKDIR /app
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml prisma.config.ts ./
+COPY package.json aube-lock.yaml aube-workspace.yaml prisma.config.ts ./
 COPY prisma ./prisma
-RUN CI=true pnpm install --frozen-lockfile
+RUN CI=true aube install --frozen-lockfile
 
 # Production dependencies only: the runtime needs the Prisma CLI (with its
 # schema engine) for `migrate deploy` and pg for the seed.
 FROM base AS prod-deps
 WORKDIR /app
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml prisma.config.ts ./
+COPY package.json aube-lock.yaml aube-workspace.yaml prisma.config.ts ./
 COPY prisma ./prisma
-RUN CI=true pnpm install --frozen-lockfile --prod
+RUN CI=true aube install --prod --frozen-lockfile
 
 FROM base AS builder
 WORKDIR /app
 COPY . .
 COPY --from=deps /app/node_modules ./node_modules
 # The generated client (gitignored) was written in the deps stage's tree.
-RUN pnpm exec prisma generate && pnpm build
+RUN aube exec prisma generate && aube run --no-install build
 
 FROM node:24-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS runner
 WORKDIR /app

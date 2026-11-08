@@ -1,6 +1,11 @@
+[settings]
+idiomatic_version_file_enable_tools = ["node"]
+
 [tools]
-node = "24"
+aube = "2.9.0"
+hk = "2.11.1"
+jactionlint = "2.5.0"
 
 [tasks.setup]
-description = "Enable corepack and install dependencies (pnpm version from package.json)"
-run = "corepack enable && pnpm install"
+description = "Install dependencies and configure git hooks"
+run = "aube install && hk install"

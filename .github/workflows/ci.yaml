@@ -40,27 +40,24 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: jdx/aube-action@v1
         with:
-          node-version-file: .node-version
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+          version: "2.9.0"
+          node-version: auto
+          run-install: true
+          cache: true
 
       - name: Lint
-        run: pnpm lint
+        run: aube run --no-install lint
 
       - name: Typecheck
-        run: pnpm typecheck
+        run: aube run --no-install typecheck
 
       - name: Test
-        run: pnpm test
+        run: aube run --no-install test
 
       - name: Build
-        run: pnpm build
+        run: aube run --no-install build
 
   publish:
     needs: check

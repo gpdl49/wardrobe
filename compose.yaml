@@ -1,4 +1,4 @@
-# Local services for `pnpm dev` and `pnpm test` (see README.md).
+# Local services for `aubr dev` and `aube test` (see README.md).
 #   docker compose up -d
 services:
   postgres:

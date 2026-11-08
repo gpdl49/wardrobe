@@ -15,25 +15,25 @@ manifests are in `clusters/centerpoint/wardrobe-system/` of that repository.
 
 Next.js (App Router, standalone output) · TypeScript · Tailwind · Prisma 7
 with `@prisma/adapter-pg` · pg-boss (in-process jobs) · S3 presigned uploads ·
-Vitest · Biome · Node 24 · pnpm.
+Vitest · Biome · Node 24 · [aube](https://aube.sh).
 
 ## Local development
 
-Needs Node 24 and pnpm. With [mise](https://mise.jdx.dev):
+Needs Node 24 and aube. With [mise](https://mise.jdx.dev):
 
 ```sh
 mise install
-mise run setup              # corepack enable + pnpm install (or: corepack enable && pnpm install)
+mise run setup              # aube install + hk install (git hooks)
 ```
 
-Without mise: install Node 24, then `corepack enable` and `pnpm install`.
+Without mise: install Node 24 and aube, then `aube install` and `hk install`.
 
 ```sh
 cp .env.example .env        # AUTH_MODE=dev, local Postgres and MinIO
 docker compose up -d        # Postgres (wardrobe + wardrobe_test) and MinIO
-pnpm db:deploy              # apply migrations
-pnpm db:seed                # default category tree (only into an empty table)
-pnpm dev                    # http://localhost:3000
+aubr db:deploy              # apply migrations
+aubr db:seed                # default category tree (only into an empty table)
+aubr dev                    # http://localhost:3000
 ```
 
 `AUTH_MODE=dev` signs every request in as a fixed user (`dev`, in the
@@ -77,14 +77,14 @@ as bob localhost:3000/api/shared-with-me
 
 | Command | What |
 |---------|------|
-| `pnpm dev` | Dev server |
-| `pnpm lint` / `pnpm format` | Biome check / fix |
-| `pnpm typecheck` | `next typegen` + `tsc` |
-| `pnpm test` | Vitest: unit tests always; Postgres tests when `TEST_DATABASE_URL` is set |
-| `pnpm build` | Production build (`.next/standalone`) |
-| `pnpm db:migrate` | Create a migration from `prisma/schema.prisma` changes (dev database) |
-| `pnpm db:deploy` | Apply migrations |
-| `pnpm db:seed` | Seed default categories |
+| `aubr dev` | Dev server |
+| `aube run lint` / `format` | Biome check / fix (`aubr` auto-installs when needed) |
+| `aube run typecheck` | `next typegen` + `tsc` |
+| `aube test` | Vitest: unit tests always; Postgres tests when `TEST_DATABASE_URL` is set |
+| `aubr build` | Production build (`.next/standalone`) |
+| `aube run db:migrate` | Create a migration from `prisma/schema.prisma` changes (dev database) |
+| `aube run db:deploy` | Apply migrations |
+| `aube run db:seed` | Seed default categories |
 
 `TEST_DATABASE_URL` must point at a throwaway database whose name contains
 `test` (compose creates `wardrobe_test`): the suite drops and re-migrates it
