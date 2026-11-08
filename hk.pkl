@@ -1,0 +1,22 @@
+amends "package://github.com/jdx/hk/releases/download/v2.11.1/hk@2.11.1#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v2.11.1/hk@2.11.1#/Builtins.pkl"
+
+steps {
+  ["trailing_whitespace"] = Builtins.trailing_whitespace
+  ["newlines"] = Builtins.newlines
+  ["biome"] = Builtins.biome
+  ["jactionlint"] = Builtins.jactionlint
+}
+
+hooks {
+  ["pre-commit"] {
+    timeout = "3m"
+  }
+  ["pre-push"] {
+    steps {
+      ["typecheck"] {
+        check = "aube run --no-install typecheck"
+      }
+    }
+  }
+}
