@@ -1,0 +1,6 @@
+[tools]
+node = "24"
+
+[tasks.setup]
+description = "Enable corepack and install dependencies (pnpm version from package.json)"
+run = "corepack enable && pnpm install"

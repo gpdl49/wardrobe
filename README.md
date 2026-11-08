@@ -19,10 +19,18 @@ Vitest · Biome · Node 24 · pnpm.
 
 ## Local development
 
+Needs Node 24 and pnpm. With [mise](https://mise.jdx.dev):
+
+```sh
+mise install
+mise run setup              # corepack enable + pnpm install (or: corepack enable && pnpm install)
+```
+
+Without mise: install Node 24, then `corepack enable` and `pnpm install`.
+
 ```sh
 cp .env.example .env        # AUTH_MODE=dev, local Postgres and MinIO
 docker compose up -d        # Postgres (wardrobe + wardrobe_test) and MinIO
-pnpm install                # also runs `prisma generate`
 pnpm db:deploy              # apply migrations
 pnpm db:seed                # default category tree (only into an empty table)
 pnpm dev                    # http://localhost:3000

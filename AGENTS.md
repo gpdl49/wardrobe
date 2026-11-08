@@ -1,5 +1,9 @@
 # wardrobe: agent notes
 
+- **Setup:** `mise install` then `mise run setup` (or `corepack enable &&
+  pnpm install`). pnpm version comes from `packageManager` in `package.json`.
+  `.node-version` is kept for CI (`node-version-file`); `mise.toml` pins the
+  same major for local installs.
 - **Contract first.** `docs/wardrobe.md` in gpdl49/homestacks is the build
   contract (names, env vars, headers, data model, HTTP API, pages, object
   keys). Follow it exactly; if something must change, change the doc there
