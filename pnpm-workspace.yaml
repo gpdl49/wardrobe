@@ -1,4 +1,4 @@
-# pnpm 11+ fails the install on any dependency build script not listed here.
+# pnpm 11+ the install on any dependency build script not listed here.
 allowBuilds:
   '@biomejs/biome': true
   '@prisma/client': true

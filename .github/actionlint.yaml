@@ -1,3 +1,5 @@
+profile: correctness
+
 self-hosted-runner:
   labels:
     - homestacks-runners

@@ -3,7 +3,7 @@
 	"version": "0.1.0",
 	"private": true,
 	"license": "UNLICENSED",
-	"packageManager": "pnpm@12.15.0",
+	"packageManager": "aube@2.9.0",
 	"engines": {
 		"node": ">=24"
 	},
