@@ -2,7 +2,8 @@
 
 - **Setup:** `mise install` then `mise run setup` (`aube install` + `hk install`). Node
   comes from `.node-version` (mise idiomatic file; also used by CI). aube version
-  comes from `packageManager` in `package.json`. Pre-commit runs Biome and
+  comes from `packageManager` in `package.json`; lockfile stays `pnpm-lock.yaml`
+  (`.npmrc`: `default-lockfile=pnpm-lock.yaml`). Pre-commit runs Biome and
   jactionlint on staged files; pre-push runs typecheck.
 - **Contract first.** `docs/wardrobe.md` in gpdl49/homestacks is the build
   contract (names, env vars, headers, data model, HTTP API, pages, object

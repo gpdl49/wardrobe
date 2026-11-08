@@ -20,7 +20,7 @@ RUN apk add --no-cache curl \
 # All dependencies, for the build. postinstall runs `prisma generate`.
 FROM base AS deps
 WORKDIR /app
-COPY package.json aube-lock.yaml aube-workspace.yaml prisma.config.ts ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc prisma.config.ts ./
 COPY prisma ./prisma
 RUN CI=true aube install --frozen-lockfile
 
@@ -28,7 +28,7 @@ RUN CI=true aube install --frozen-lockfile
 # schema engine) for `migrate deploy` and pg for the seed.
 FROM base AS prod-deps
 WORKDIR /app
-COPY package.json aube-lock.yaml aube-workspace.yaml prisma.config.ts ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc prisma.config.ts ./
 COPY prisma ./prisma
 RUN CI=true aube install --prod --frozen-lockfile
 

@@ -4,7 +4,9 @@ import "package://github.com/jdx/hk/releases/download/v2.11.1/hk@2.11.1#/Builtin
 steps {
   ["trailing_whitespace"] = Builtins.trailing_whitespace
   ["newlines"] = Builtins.newlines
-  ["biome"] = Builtins.biome
+  ["biome"] = (Builtins.biome) {
+    prefix = List("aube", "exec")
+  }
   ["jactionlint"] = Builtins.jactionlint
 }
 
