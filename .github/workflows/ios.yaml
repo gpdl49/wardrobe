@@ -54,6 +54,12 @@ jobs:
           cd ios
           xcodegen generate --quiet
 
+      - name: Verify Release signing identity
+        run: |
+          xcodebuild -project ios/Wardrobe.xcodeproj -scheme Wardrobe \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -showBuildSettings | grep -Eq '^[[:space:]]*CODE_SIGN_IDENTITY = Apple Distribution$'
+
       - name: Test on iPhone simulator
         run: |
           cd ios
