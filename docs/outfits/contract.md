@@ -41,7 +41,7 @@ three switches in `features`.
 - `Outfit`: `id`, `ownerId`, `name` (1–200), `notes`, `seasons`, timestamps. Tags through `OutfitTag` (the owner's `Tag` rows, shared with items).
 - `OutfitItem`: `outfitId`, `itemId`, `position`. Primary key (`outfitId`, `itemId`). Deleting an item removes it from its outfits.
 - `OutfitShare`: `id`, `outfitId`, `granteeId`, `createdAt`. Unique (`outfitId`, `granteeId`). View only.
-- `Photo` gains `outfitId` (nullable) and kind `outfit`. A photo has an item or an outfit, never both (check constraint). An outfit photo's owner is the outfit's owner.
+- `Photo` gains `outfitId` (nullable) and kind `outfit`. A photo has an item, an outfit or neither (an unassigned packing capture), never both (check constraint). An outfit photo's owner is the outfit's owner.
 - `OutfitImmichAsset`: `id`, `outfitId`, `linkedById` (whose Immich key reads it), `assetId` (Immich asset UUID), `fileName`, `width`, `height`, `thumbhash`, `takenAt`, `createdAt`. Unique (`outfitId`, `assetId`).
 - `ImmichConnection`: `userId` (primary key), `apiKey` (encrypted, `v1:<iv>:<tag>:<ciphertext>`, each part base64url), `immichUserId`, `immichEmail`, `immichName`, timestamps.
 - `SuggestionRun`: `id`, `ownerId` (the wardrobe), `requestedById`, `status` (`queued` | `running` | `done` | `failed`), `request` (JSON `SuggestionRequest`), `model`, `error`, timestamps.
@@ -68,7 +68,7 @@ GET    /photos/{id}/{variant}                 also readable through an outfit (s
 GET    /immich                                -> ImmichStatus
 PUT    /immich                                {apiKey} -> ImmichStatus   (validates the key against Immich; 422 `immich_key_rejected`)
 DELETE /immich                                -> 204 (forgets the key; assets the user linked stay listed but stop loading)
-GET    /immich/assets?q=&cursor=&limit=       -> {assets: ImmichAsset[], nextCursor}   (the caller's own library, images only, newest first; q is a smart search; limit 1–100, default 50)
+GET    /immich/assets?q=&cursor=&limit=       -> {assets: ImmichAsset[], nextCursor}   (the caller's own library, images only, newest first; q is a smart search, ordered by relevance instead; limit 1–100, default 50)
 GET    /immich/assets/{assetId}/thumb         -> 200 image bytes (the caller's own key; for the picker)
 POST   /outfits/{id}/immich-assets            {assetIds: uuid[1..50]} -> 201 OutfitPhoto[]   (already linked ones are returned, not duplicated)
 DELETE /outfits/{id}/immich-assets/{linkId}   -> 204
