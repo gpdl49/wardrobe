@@ -701,3 +701,43 @@ describeWithDb("analyses", () => {
 		});
 	});
 });
+
+describeWithDb("bulk tagging", () => {
+	beforeEach(async () => {
+		await resetDb();
+		process.env.OPENROUTER_API_KEY = "test-key";
+		resetEnvCache();
+	});
+	afterEach(() => {
+		delete process.env.OPENROUTER_API_KEY;
+		resetEnvCache();
+	});
+	it("queues eligible items and applies only the newest done vision tags", async () => {
+		const { POST: queue } = await import("@/app/api/items/analyses/route");
+		const { POST: apply } = await import(
+			"@/app/api/items/analyses/apply-tags/route"
+		);
+		const item = await makeItem();
+		await makePhoto({ itemId: item.id });
+		const request = () =>
+			apiRequest("/api/items/analyses", { method: "POST", body: {} });
+		expect(await json(await queue(request(), undefined))).toEqual({
+			queued: 1,
+		});
+		expect(await json(await queue(request(), undefined))).toEqual({
+			queued: 0,
+		});
+		await db().analysis.updateMany({
+			where: { itemId: item.id },
+			data: { status: "done", result: { tags: ["formal"] } },
+		});
+		expect(await json(await apply(request(), undefined))).toEqual({
+			updated: 1,
+		});
+		const tags = await db().itemTag.findMany({
+			where: { itemId: item.id },
+			include: { tag: true },
+		});
+		expect(tags.map((t) => t.tag.name)).toEqual(["formal"]);
+	});
+});
