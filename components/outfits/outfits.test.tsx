@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import type { OutfitDetailDto, OutfitPhotoDto } from "@/lib/api/types";
 import { mockApi, renderWithQuery, requests } from "@/test/helpers/dom";
+import { itemDetail } from "@/test/helpers/factories";
 import { OutfitDetail } from "./outfit-detail";
 import { OutfitList } from "./outfit-list";
 import { OutfitImage } from "./outfit-tile";
@@ -65,6 +66,31 @@ it("hides write controls for a viewer", async () => {
 	expect(screen.queryByText("Remove photo")).not.toBeInTheDocument();
 });
 
+it("links only the items the viewer can open on their own", async () => {
+	const [readable, outfitOnly] = ["readable", "outfit-only"].map((id) => {
+		const { photos, movements, analyses, ...summary } = itemDetail({
+			id,
+			name: id,
+			access: "view",
+			location: null,
+		});
+		return summary;
+	});
+	mockApi({
+		"GET /api/outfits/one": {
+			...outfit,
+			items: [readable, outfitOnly],
+			itemCount: 2,
+			readableItemIds: ["readable"],
+		},
+	});
+	renderWithQuery(<OutfitDetail id="one" />);
+	expect(await screen.findByRole("link", { name: /readable/ })).toHaveAttribute(
+		"href",
+		"/items/readable",
+	);
+	expect(screen.getByText("outfit-only").closest("a")).toBeNull();
+});
 it("uploads an outfit photo and completes it", async () => {
 	const fetch = mockApi({
 		"GET /api/outfits/one": { ...outfit, access: "owner" },

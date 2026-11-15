@@ -13,12 +13,10 @@ import { Input } from "@/components/ui/field";
 import { useCurrentUser } from "@/lib/client/current-user";
 import { itemTitle } from "@/lib/client/labels";
 import { outfits, useOutfit, useOutfitMutation } from "@/lib/client/outfits";
-import { useSharedWithMe } from "@/lib/client/queries";
 import { OutfitImage } from "./outfit-tile";
 export function OutfitDetail({ id }: { id: string }) {
 	const data = useOutfit(id);
 	const me = useCurrentUser();
-	const shares = useSharedWithMe();
 	const router = useRouter();
 	const [picker, setPicker] = useState(false);
 	const [grantee, setGrantee] = useState("");
@@ -105,11 +103,7 @@ export function OutfitDetail({ id }: { id: string }) {
 				<h2 className="text-xl font-semibold">Items</h2>
 				<div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
 					{outfit.items.map((item) =>
-						item.location ||
-						item.access !== "view" ||
-						shares.data?.some(
-							(share) => share.owner.id === item.ownerId && !share.location,
-						) ? (
+						outfit.readableItemIds.includes(item.id) ? (
 							<ItemCard key={item.id} item={item} />
 						) : (
 							<div
