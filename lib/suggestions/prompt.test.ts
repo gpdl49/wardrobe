@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
 	buildSuggestionMessages,
+	DEFAULT_TEXT_MODEL,
 	parseSuggestionOutput,
 	suggestionJsonSchema,
 } from "./prompt";
 
 describe("suggestion prompt", () => {
+	it("uses the selected structured-output text model", () => {
+		expect(DEFAULT_TEXT_MODEL).toBe("openai/gpt-5.6-luna");
+	});
 	it("keeps user text in JSON data, separate from instructions", () => {
 		const messages = buildSuggestionMessages(
 			[

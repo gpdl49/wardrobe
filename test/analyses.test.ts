@@ -221,6 +221,16 @@ describeWithDb("analyses", () => {
 	});
 
 	describe("onPhotoReady", () => {
+		it("does not enqueue analyses for an outfit photo", async () => {
+			const outfit = await db().outfit.create({
+				data: { ownerId: await userId(), name: "Look" },
+			});
+			await onPhotoReady(
+				await makePhoto({ outfitId: outfit.id, kind: "outfit" }),
+			);
+			expect(enqueueMock).not.toHaveBeenCalled();
+			expect(await db().analysis.count()).toBe(0);
+		});
 		it("enqueues the photo's analyses", async () => {
 			const item = await makeItem();
 			await onPhotoReady(await makePhoto({ itemId: item.id }));
@@ -361,6 +371,37 @@ describeWithDb("analyses", () => {
 				tags: ["crew neck"],
 				labelText: "M\n100% wool",
 			});
+		});
+
+		it("sends the owner's fifty most used tags to vision as data", async () => {
+			const { item, vision } = await setUp();
+			const names = Array.from(
+				{ length: 51 },
+				(_, i) => `tag-${String(i).padStart(2, "0")}`,
+			);
+			await db().tag.createMany({
+				data: names.map((name) => ({ ownerId: item.ownerId, name })),
+			});
+			const tags = await db().tag.findMany({
+				where: { ownerId: item.ownerId },
+			});
+			await db().itemTag.createMany({
+				data: tags
+					.filter((t) => t.name !== "tag-00")
+					.map((t) => ({ itemId: item.id, tagId: t.id })),
+			});
+			const fetchMock = reply({ name: "Jumper" });
+			await runVisionAnalysis(vision.id, { fetch: fetchMock });
+			const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string);
+			const text = body.messages[1].content[0].text as string;
+			const vocabulary = JSON.parse(
+				text
+					.split("Existing tag vocabulary (JSON data): ")[1]
+					?.split("\n\n")[0] ?? "null",
+			);
+			expect(vocabulary).toHaveLength(50);
+			expect(vocabulary).not.toContain("tag-00");
+			expect(vocabulary).toContain("tag-50");
 		});
 
 		it("fails with the raw output on an unknown category", async () => {

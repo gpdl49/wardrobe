@@ -53,4 +53,43 @@ describeWithDb("bulk tagging explicit items", () => {
 		});
 		expect(await db().itemTag.count()).toBe(2);
 	});
+	it("limits a call to 50 eligible items and filters explicit IDs by owner", async () => {
+		const ownerId = await userId();
+		await db().item.createMany({
+			data: Array.from({ length: 51 }, () => ({ ownerId })),
+		});
+		const items = await db().item.findMany({ where: { ownerId } });
+		await db().photo.createMany({
+			data: items.map((item) => ({
+				ownerId,
+				itemId: item.id,
+				kind: "main" as const,
+				status: "ready" as const,
+				contentType: "image/jpeg",
+				size: 1,
+			})),
+		});
+		const request = (body: unknown) =>
+			apiRequest("/api/items/analyses", { method: "POST", body });
+		expect(await json(await queue(request({}), undefined))).toEqual({
+			queued: 50,
+		});
+		await share(OTHER_USER, TEST_USER, "edit");
+		const other = await makeItem({ ownerId: await userId(OTHER_USER) });
+		await db().photo.create({
+			data: {
+				ownerId: other.ownerId,
+				itemId: other.id,
+				kind: "main",
+				status: "ready",
+				contentType: "image/jpeg",
+				size: 1,
+			},
+		});
+		expect(
+			await json(
+				await queue(request({ ownerId, itemIds: [other.id] }), undefined),
+			),
+		).toEqual({ queued: 0 });
+	});
 });

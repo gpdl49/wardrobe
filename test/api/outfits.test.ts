@@ -222,4 +222,162 @@ describeWithDb("outfits API", () => {
 			vi.restoreAllMocks();
 		}
 	});
+	it("deletes uploaded photo objects and Immich links with the outfit", async () => {
+		const outfit = await makeOutfit();
+		const photo = await db().photo.create({
+			data: {
+				ownerId: outfit.ownerId,
+				outfitId: outfit.id,
+				kind: "outfit",
+				status: "ready",
+				contentType: "image/jpeg",
+				size: 1,
+			},
+		});
+		await db().outfitImmichAsset.create({
+			data: {
+				outfitId: outfit.id,
+				linkedById: outfit.ownerId,
+				assetId: crypto.randomUUID(),
+			},
+		});
+		const s3 = installFakeS3();
+		try {
+			for (const key of [
+				`photos/${photo.id}/original`,
+				`photos/${photo.id}/thumb.webp`,
+				`photos/${photo.id}/display.webp`,
+			])
+				s3.upload(key, new Uint8Array([1]));
+			expect(
+				(
+					await remove(
+						apiRequest("/", { method: "DELETE" }),
+						routeParams({ id: outfit.id }),
+					)
+				).status,
+			).toBe(204);
+			expect(s3.objects.size).toBe(0);
+			expect(await db().photo.count()).toBe(0);
+			expect(await db().outfitImmichAsset.count()).toBe(0);
+		} finally {
+			s3.restore();
+		}
+	});
+	it("validates outfit items and replaces their order", async () => {
+		const items = await Promise.all([makeItem(), makeItem()]);
+		const ids = items.map((item) => item.id);
+		const request = (body: unknown) =>
+			apiRequest("/api/outfits", { method: "POST", body });
+		expect(
+			(await create(request({ name: "x", itemIds: [ids[0], ids[0]] }), {}))
+				.status,
+		).toBe(400);
+		expect(
+			(
+				await create(
+					request({
+						name: "x",
+						itemIds: Array.from({ length: 51 }, () => crypto.randomUUID()),
+					}),
+					{},
+				)
+			).status,
+		).toBe(400);
+		const result = await json<{ id: string }>(
+			await create(request({ name: "x", itemIds: ids }), {}),
+		);
+		const updated = await json<{ items: { id: string }[] }>(
+			await patch(
+				apiRequest("/", {
+					method: "PATCH",
+					body: { itemIds: ids.toReversed() },
+				}),
+				routeParams({ id: result.id }),
+			),
+		);
+		expect(updated.items.map((item) => item.id)).toEqual(ids.toReversed());
+	});
+	it("validates share recipients and duplicate shares", async () => {
+		const outfit = await makeOutfit();
+		await userId(OTHER_USER);
+		const post = (grantee: string) =>
+			shareRoute(
+				apiRequest("/", { method: "POST", body: { grantee } }),
+				routeParams({ id: outfit.id }),
+			);
+		expect((await post("not-a-user")).status).toBe(422);
+		expect((await post(TEST_USER.email as string)).status).toBe(422);
+		expect((await post(OTHER_USER.username as string)).status).toBe(201);
+		expect((await post(OTHER_USER.email as string)).status).toBe(409);
+	});
+	it("filters, paginates and chooses the first ready upload as cover", async () => {
+		const item = await makeItem();
+		const request = (body: unknown) =>
+			apiRequest("/api/outfits", { method: "POST", body });
+		const old = await json<{ id: string }>(
+			await create(
+				request({
+					name: "Summer look",
+					seasons: ["summer"],
+					tags: ["formal"],
+					itemIds: [item.id],
+				}),
+				{},
+			),
+		);
+		const newer = await json<{ id: string }>(
+			await create(request({ name: "Winter look", seasons: ["winter"] }), {}),
+		);
+		await db().outfit.update({
+			where: { id: old.id },
+			data: { createdAt: new Date("2020-01-01T00:00:00Z") },
+		});
+		const photo = await db().photo.create({
+			data: {
+				ownerId: await userId(),
+				outfitId: old.id,
+				kind: "outfit",
+				status: "ready",
+				contentType: "image/jpeg",
+				size: 1,
+			},
+		});
+		await db().outfitImmichAsset.create({
+			data: {
+				outfitId: old.id,
+				linkedById: await userId(),
+				assetId: crypto.randomUUID(),
+			},
+		});
+		const filtered = await json<{
+			outfits: { id: string; cover: { id: string }; previewItems: unknown[] }[];
+		}>(
+			await list(
+				apiRequest(
+					`/api/outfits?q=Summer&tag=formal&season=summer&item=${item.id}`,
+				),
+				{},
+			),
+		);
+		expect(filtered.outfits).toHaveLength(1);
+		expect(filtered.outfits[0]).toMatchObject({
+			id: old.id,
+			cover: { id: photo.id },
+			previewItems: [{ id: item.id }],
+		});
+		const page = await json<{ outfits: { id: string }[]; nextCursor: string }>(
+			await list(apiRequest("/api/outfits?limit=1"), {}),
+		);
+		expect(page.outfits[0]?.id).toBe(newer.id);
+		const next = await json<{ outfits: { id: string }[] }>(
+			await list(
+				apiRequest(
+					`/api/outfits?limit=1&cursor=${encodeURIComponent(page.nextCursor)}`,
+				),
+				{},
+			),
+		);
+		expect(next.outfits[0]?.id).toBe(old.id);
+	});
 });

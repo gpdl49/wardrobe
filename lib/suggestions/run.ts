@@ -89,6 +89,7 @@ export async function runSuggestions(
 			schemaName: SUGGESTION_SCHEMA_NAME,
 			schema: suggestionJsonSchema,
 			maxTokens: 2000,
+			omitTemperature: true,
 			fetch: deps.fetch,
 		});
 		const parsed = parseSuggestionOutput(

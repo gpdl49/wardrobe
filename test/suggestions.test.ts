@@ -3,6 +3,8 @@ import { POST as dismiss } from "@/app/api/outfit-suggestions/[id]/dismiss/route
 import { POST } from "@/app/api/suggestion-runs/route";
 import { db } from "@/lib/db";
 import { resetEnvCache } from "@/lib/env";
+import { suggestionRun } from "@/lib/jobs/definitions/suggestion-run";
+import { jobDefinitions } from "@/lib/jobs/registry";
 import { runSuggestions } from "@/lib/suggestions/run";
 import { describeWithDb, resetDb } from "@/test/helpers/db";
 import { makeItem } from "@/test/helpers/fixtures";
@@ -11,6 +13,10 @@ import { OTHER_USER, share, userId } from "@/test/helpers/users";
 
 vi.mock("@/lib/jobs/queue", () => ({ enqueue: vi.fn(async () => "job") }));
 describeWithDb("suggestion runs", () => {
+	it("registers the suggestion job without retries", () => {
+		expect(jobDefinitions).toContain(suggestionRun);
+		expect(suggestionRun.queue?.retryLimit).toBe(0);
+	});
 	beforeEach(async () => {
 		await resetDb();
 		process.env.OPENROUTER_API_KEY = "test-key";
@@ -101,6 +107,49 @@ describeWithDb("suggestion runs", () => {
 				.status,
 		).toBe("failed");
 	});
+	it("enforces creation constraints and idempotent dismissal", async () => {
+		const post = (body: unknown) =>
+			POST(
+				apiRequest("/api/suggestion-runs", { method: "POST", body }),
+				undefined,
+			);
+		expect((await post({})).status).toBe(409);
+		const items = await Promise.all(
+			Array.from({ length: 4 }, () => makeItem()),
+		);
+		expect((await post({ prompt: "x".repeat(501) })).status).toBe(400);
+		expect((await post({ count: 7 })).status).toBe(400);
+		expect((await post({ itemIds: [crypto.randomUUID()] })).status).toBe(422);
+		const run = await json<{ id: string }>(
+			await post({ itemIds: [items[0]?.id] }),
+		);
+		const row = await db().outfitSuggestion.create({
+			data: {
+				runId: run.id,
+				ownerId: await userId(),
+				position: 0,
+				name: "Look",
+				itemIds: [],
+			},
+		});
+		const req = () => apiRequest("/", { method: "POST" });
+		expect((await dismiss(req(), routeParams({ id: row.id }))).status).toBe(
+			200,
+		);
+		expect((await dismiss(req(), routeParams({ id: row.id }))).status).toBe(
+			200,
+		);
+		await db().outfitSuggestion.update({
+			where: { id: row.id },
+			data: { feedback: "saved" },
+		});
+		expect((await dismiss(req(), routeParams({ id: row.id }))).status).toBe(
+			409,
+		);
+		delete process.env.OPENROUTER_API_KEY;
+		resetEnvCache();
+		expect((await post({})).status).toBe(409);
+	});
 	it("does not replay a run after edit access is revoked", async () => {
 		const ownerId = await userId();
 		await Promise.all(Array.from({ length: 4 }, () => makeItem()));
@@ -134,6 +183,8 @@ describeWithDb("suggestion runs", () => {
 		});
 		const fetcher = vi.fn<typeof fetch>(async (_url, init) => {
 			const body = JSON.parse(init?.body as string);
+			expect(body.model).toBe("openai/gpt-5.6-luna");
+			expect(body).not.toHaveProperty("temperature");
 			const data = JSON.parse(body.messages[1].content);
 			expect(data.items).toHaveLength(400);
 			expect(data.items[0].id).toBe(required.id);

@@ -1,10 +1,30 @@
-import { describe, expect, it } from "vitest";
-import { createS3Client, photoKey, presignGet, presignPut } from "@/lib/s3";
+import { describe, expect, it, vi } from "vitest";
+import {
+	createS3Client,
+	deleteObjects,
+	photoKey,
+	presignGet,
+	presignPut,
+} from "@/lib/s3";
+import { installFakeS3 } from "@/test/helpers/s3";
 
 const credentials = {
 	AWS_ACCESS_KEY_ID: "AKIAEXAMPLE",
 	AWS_SECRET_ACCESS_KEY: "secret",
 };
+
+it("rejects per-object errors in a successful batch delete response", async () => {
+	const fake = installFakeS3();
+	vi.spyOn(fake.client, "send").mockResolvedValueOnce({
+		Errors: [{ Key: "photos/p/original", Code: "AccessDenied" }],
+	} as never);
+	try {
+		await expect(deleteObjects(["photos/p/original"])).rejects.toThrow();
+	} finally {
+		fake.restore();
+		vi.restoreAllMocks();
+	}
+});
 
 describe("photoKey", () => {
 	it("follows the contract layout", () => {
