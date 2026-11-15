@@ -13,6 +13,17 @@ public actor FixtureWardrobeAPI: WardrobeAPI {
 	public var locations: [LocationDTO]
 	public var categories: [CategoryDTO]
 	public var items: [ItemSummaryDTO]
+	public var photos: [PhotoDTO] = []
+	public var analysesList: [AnalysisDTO] = []
+	public var movements: [MovementDTO] = []
+
+	public func seedPhoto(_ photo: PhotoDTO) {
+		photos.append(photo)
+	}
+
+	public func seedAnalysis(_ analysis: AnalysisDTO) {
+		analysesList.append(analysis)
+	}
 	/// Calls made, as "METHOD path", for assertions.
 	public private(set) var calls: [String] = []
 	/// When set, the next call throws it.
@@ -129,7 +140,10 @@ public actor FixtureWardrobeAPI: WardrobeAPI {
 			id: s.id, ownerId: s.ownerId, access: s.access, name: s.name, category: s.category, brand: s.brand,
 			size: s.size, colors: s.colors, pattern: s.pattern, material: s.material, seasons: s.seasons,
 			status: s.status, location: s.location, notes: s.notes, tags: s.tags, coverPhoto: s.coverPhoto,
-			createdAt: s.createdAt, updatedAt: s.updatedAt, photos: [], movements: [], analyses: [])
+			createdAt: s.createdAt, updatedAt: s.updatedAt,
+			photos: photos.filter { $0.itemId == id },
+			movements: movements.filter { $0.from?.id == s.location?.id || $0.to?.id == s.location?.id },
+			analyses: analysesList.filter { $0.itemId == id })
 	}
 
 	public func createItem(_ body: CreateItemRequest, idempotencyKey: String) async throws -> ItemSummaryDTO {
@@ -172,14 +186,101 @@ public actor FixtureWardrobeAPI: WardrobeAPI {
 		return MoveItemsResult(moved: n)
 	}
 
-	public func analyses(itemId: ID) async throws -> [AnalysisDTO] { try record("GET /items/\(itemId)/analyses"); return [] }
-	public func runAnalyses(itemId: ID, kinds: [AnalysisKind]?) async throws -> [AnalysisDTO] { try record("POST /items/\(itemId)/analyses"); throw Self.unimplemented("runAnalyses") }
-	public func applyAnalysis(itemId: ID, analysisId: ID, fields: [ItemSuggestion.Field]) async throws -> ItemDetailDTO { try record("POST /items/\(itemId)/analyses/\(analysisId)/apply"); throw Self.unimplemented("applyAnalysis") }
+	public func analyses(itemId: ID) async throws -> [AnalysisDTO] {
+		try record("GET /items/\(itemId)/analyses")
+		return analysesList.filter { $0.itemId == itemId }
+	}
+
+	public func runAnalyses(itemId: ID, kinds: [AnalysisKind]?) async throws -> [AnalysisDTO] {
+		try record("POST /items/\(itemId)/analyses")
+		guard items.contains(where: { $0.id == itemId }) else {
+			throw APIError(status: 404, error: "not_found", message: "Item not found")
+		}
+		let selectedKinds = kinds ?? [.colors, .vision]
+		var created: [AnalysisDTO] = []
+		for kind in selectedKinds {
+			let id = UUID().uuidString.lowercased()
+			let suggestion: ItemSuggestion
+			if kind == .colors {
+				suggestion = ItemSuggestion(colors: [ItemColor(name: "navy", hex: "#1f2a44", share: 0.85)])
+			} else {
+				suggestion = ItemSuggestion(
+					name: "Suggested Cardigan",
+					categorySlug: "knitwear",
+					brand: "Uniqlo",
+					seasons: [.autumn, .winter],
+					tags: ["merino", "warm"]
+				)
+			}
+			let a = AnalysisDTO(
+				id: id,
+				itemId: itemId,
+				kind: kind,
+				model: "gemini-vision-2.5",
+				status: .done,
+				result: suggestion,
+				createdAt: now,
+				updatedAt: now
+			)
+			created.append(a)
+			analysesList.append(a)
+		}
+		return created
+	}
+
+	public func applyAnalysis(itemId: ID, analysisId: ID, fields: [ItemSuggestion.Field]) async throws -> ItemDetailDTO {
+		try record("POST /items/\(itemId)/analyses/\(analysisId)/apply")
+		guard let itemIndex = items.firstIndex(where: { $0.id == itemId }) else {
+			throw APIError(status: 404, error: "not_found", message: "Item not found")
+		}
+		guard let aIndex = analysesList.firstIndex(where: { $0.id == analysisId && $0.itemId == itemId }) else {
+			throw APIError(status: 404, error: "not_found", message: "Analysis not found")
+		}
+		guard let suggestion = analysesList[aIndex].result else {
+			throw APIError(status: 400, error: "no_result", message: "Analysis has no result to apply")
+		}
+		for field in fields {
+			switch field {
+			case .name:
+				if let name = suggestion.name { items[itemIndex].name = name }
+			case .categorySlug:
+				if let slug = suggestion.categorySlug, let cat = categories.first(where: { $0.slug == slug }) {
+					items[itemIndex].category = CategoryRef(id: cat.id, name: cat.name, slug: cat.slug)
+				}
+			case .brand:
+				if let brand = suggestion.brand { items[itemIndex].brand = brand }
+			case .size:
+				if let size = suggestion.size { items[itemIndex].size = size }
+			case .colors:
+				if let colors = suggestion.colors { items[itemIndex].colors = colors }
+			case .pattern:
+				if let pattern = suggestion.pattern { items[itemIndex].pattern = pattern }
+			case .material:
+				if let material = suggestion.material { items[itemIndex].material = material }
+			case .seasons:
+				if let seasons = suggestion.seasons { items[itemIndex].seasons = seasons }
+			case .tags:
+				if let tags = suggestion.tags {
+					var existing = items[itemIndex].tags
+					for t in tags where !existing.contains(t) { existing.append(t) }
+					items[itemIndex].tags = existing
+				}
+			case .labelText:
+				if let labelText = suggestion.labelText {
+					let current = items[itemIndex].notes ?? ""
+					items[itemIndex].notes = current.isEmpty ? labelText : "\(current)\n\(labelText)"
+				}
+			}
+		}
+		analysesList[aIndex].appliedAt = now
+		return try await item(id: itemId)
+	}
 
 	public func createPhoto(_ body: CreatePhotoRequest, idempotencyKey: String) async throws -> PhotoUploadDTO {
 		try record("POST /photos")
 		let id = UUID().uuidString.lowercased()
 		let photo = PhotoDTO(id: id, ownerId: me.id, access: .owner, itemId: body.itemId, kind: body.kind, status: .pending, contentType: body.contentType, size: body.size, createdAt: now)
+		photos.append(photo)
 		return PhotoUploadDTO(photo: photo, uploadUrl: URL(string: "https://s3.example.com/photos/\(id)/original")!, uploadHeaders: ["Content-Type": body.contentType])
 	}
 	public func uploadPhoto(_ data: Data, to url: URL, headers: [String: String]) async throws { try record("PUT \(url.path)") }
@@ -187,8 +288,23 @@ public actor FixtureWardrobeAPI: WardrobeAPI {
 		try record("POST /photos/\(id)/complete")
 		return PhotoDTO(id: id, ownerId: me.id, access: .owner, itemId: nil, kind: .main, status: .processing, contentType: "image/jpeg", size: 1, createdAt: now)
 	}
-	public func updatePhoto(id: ID, _ body: UpdatePhotoRequest) async throws -> PhotoDTO { try record("PATCH /photos/\(id)"); throw Self.unimplemented("updatePhoto") }
-	public func deletePhoto(id: ID) async throws { try record("DELETE /photos/\(id)") }
+	public func updatePhoto(id: ID, _ body: UpdatePhotoRequest) async throws -> PhotoDTO {
+		try record("PATCH /photos/\(id)")
+		guard let i = photos.firstIndex(where: { $0.id == id }) else {
+			throw APIError(status: 404, error: "not_found", message: "Photo not found")
+		}
+		switch body.itemId {
+		case .unset: break
+		case .null: photos[i].itemId = nil
+		case .value(let val): photos[i].itemId = val
+		}
+		if let k = body.kind { photos[i].kind = k }
+		return photos[i]
+	}
+	public func deletePhoto(id: ID) async throws {
+		try record("DELETE /photos/\(id)")
+		photos.removeAll { $0.id == id }
+	}
 	public func photoURL(id: ID, variant: PhotoVariant) async throws -> URL? { try record("GET /photos/\(id)/\(variant)"); return nil }
 
 	public func createSession(_ body: CreateSessionRequest, idempotencyKey: String) async throws -> PackingSessionDTO {
