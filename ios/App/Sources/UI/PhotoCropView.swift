@@ -1,82 +1,108 @@
+import Mantis
 import SwiftUI
 import UIKit
-
-/// Normalized crop edges in the image as displayed, after orientation is applied.
-struct PhotoCrop {
-	var left: Double = 0
-	var right: Double = 0
-	var top: Double = 0
-	var bottom: Double = 0
-
-	func render(_ data: Data) -> Data? {
-		guard let image = UIImage(data: data), image.size.width > 0, image.size.height > 0,
-			left >= 0, right >= 0, top >= 0, bottom >= 0,
-			left + right < 1, top + bottom < 1 else { return nil }
-		let size = image.size
-		let rect = CGRect(x: size.width * left, y: size.height * top,
-			width: size.width * (1 - left - right), height: size.height * (1 - top - bottom))
-		let format = UIGraphicsImageRendererFormat()
-		format.scale = image.scale
-		let result = UIGraphicsImageRenderer(size: rect.size, format: format).image { _ in
-			image.draw(at: CGPoint(x: -rect.minX, y: -rect.minY))
-		}
-		return result.jpegData(compressionQuality: 0.95)
-	}
-}
 
 struct PhotoCropView: View {
 	let data: Data
 	let onUse: (Data) -> Void
 	@Environment(\.dismiss) private var dismiss
-	@State private var crop = PhotoCrop()
 	@State private var failed = false
+	@State private var finished = false
 
 	var body: some View {
-		NavigationStack {
-			VStack {
-				if let image = UIImage(data: data) {
-					GeometryReader { geometry in
-						let scale = min(geometry.size.width / image.size.width, geometry.size.height / image.size.height)
-						let width = image.size.width * scale
-						let height = image.size.height * scale
-						ZStack(alignment: .topLeading) {
-							Image(uiImage: image).resizable().frame(width: width, height: height)
-							Rectangle().stroke(.white, lineWidth: 3)
-								.frame(width: width * (1 - crop.left - crop.right), height: height * (1 - crop.top - crop.bottom))
-								.offset(x: width * crop.left, y: height * crop.top)
-						}
-						.frame(width: width, height: height)
-						.position(x: geometry.size.width / 2, y: geometry.size.height / 2)
-					}
-				}
-				Button("Use original") { onUse(data); dismiss() }
+		VStack(spacing: 0) {
+			HStack {
+				Text("Crop photo").font(.headline)
+				Spacer()
+				Button("Use original") { use(data) }
 					.buttonStyle(.bordered)
-				Text("Adjust the edges to frame your photo.").font(.caption).foregroundStyle(.secondary)
-				edge("Left", value: $crop.left)
-				edge("Right", value: $crop.right)
-				edge("Top", value: $crop.top)
-				edge("Bottom", value: $crop.bottom)
 			}.padding()
-			.navigationTitle("Crop photo")
-			.navigationBarTitleDisplayMode(.inline)
-			.toolbar {
-				ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-				ToolbarItem(placement: .confirmationAction) {
-					Button("Use crop") {
-						if let result = crop.render(data) { onUse(result); dismiss() } else { failed = true }
-					}
-				}
+			.foregroundStyle(.white)
+			.tint(.white)
+			if let image = UIImage(data: data), image.size.width > 0, image.size.height > 0 {
+				PhotoCropEditor(image: image, onUse: { result in
+					use(result)
+				}, onCancel: { cancel() }, onFailure: { if !finished { failed = true } })
+				.clipped()
+			} else {
+				ContentUnavailableView("Could not load photo", systemImage: "photo.badge.exclamationmark",
+					description: Text("Please try another photo."))
+				Button("Cancel") { cancel() }.padding()
 			}
-			.alert("Could not crop photo", isPresented: $failed) {
-				Button("OK", role: .cancel) {}
-			} message: { Text("Please try another photo.") }
 		}
+		.onDisappear { finished = true }
+		.background(.black)
+		.preferredColorScheme(.dark)
+		.alert("Could not crop photo", isPresented: $failed) {
+			Button("OK", role: .cancel) {}
+		} message: { Text("Please try again or use the original photo.") }
 	}
 
-	private func edge(_ title: String, value: Binding<Double>) -> some View {
-		HStack {
-			Text(title).frame(width: 55, alignment: .leading)
-			Slider(value: value, in: 0...0.45).accessibilityLabel("\(title) crop")
+	private func use(_ result: Data) {
+		guard !finished else { return }
+		finished = true
+		onUse(result)
+		dismiss()
+	}
+
+	private func cancel() {
+		finished = true
+		dismiss()
+	}
+}
+
+/// Keeps Mantis's standard gestures and toolbar, and bridges its result to the upload flow.
+struct PhotoCropEditor: UIViewControllerRepresentable {
+	let image: UIImage
+	let onUse: (Data) -> Void
+	let onCancel: () -> Void
+	let onFailure: () -> Void
+
+	func makeCoordinator() -> Coordinator {
+		Coordinator(onUse: onUse, onCancel: onCancel, onFailure: onFailure)
+	}
+
+	func makeUIViewController(context: Context) -> Mantis.CropViewController {
+		var config = Mantis.Config()
+		config.cropMode = .async
+		let controller = Mantis.cropViewController(image: image, config: config)
+		controller.view.clipsToBounds = true
+		controller.delegate = context.coordinator
+		return controller
+	}
+
+	func updateUIViewController(_ controller: Mantis.CropViewController, context: Context) {
+		context.coordinator.onUse = onUse
+		context.coordinator.onCancel = onCancel
+		context.coordinator.onFailure = onFailure
+	}
+
+	@MainActor final class Coordinator: NSObject, CropViewControllerDelegate {
+		var onUse: (Data) -> Void
+		var onCancel: () -> Void
+		var onFailure: () -> Void
+
+		init(onUse: @escaping (Data) -> Void, onCancel: @escaping () -> Void, onFailure: @escaping () -> Void) {
+			self.onUse = onUse
+			self.onCancel = onCancel
+			self.onFailure = onFailure
+		}
+
+		func cropViewControllerDidCrop(_ cropViewController: Mantis.CropViewController,
+			cropped: UIImage, transformation: Transformation, cropInfo: CropInfo) {
+			guard let data = cropped.jpegData(compressionQuality: 0.95) else {
+				onFailure()
+				return
+			}
+			onUse(data)
+		}
+
+		func cropViewControllerDidCancel(_ cropViewController: Mantis.CropViewController, original: UIImage) {
+			onCancel()
+		}
+
+		func cropViewControllerDidFailToCrop(_ cropViewController: Mantis.CropViewController, original: UIImage) {
+			onFailure()
 		}
 	}
 }

@@ -93,7 +93,7 @@ struct PackView: View {
 						}
 					)
 				}
-				.sheet(item: $pendingCrop) { photo in
+				.fullScreenCover(item: $pendingCrop) { photo in
 					PhotoCropView(data: photo.data) { data in
 						if photo.isLabel { model.captureLabelPhoto(data: data) }
 						else { model.capturePhoto(data: data) }

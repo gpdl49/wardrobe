@@ -129,7 +129,7 @@ struct NewItemView: View {
 					model.capturedPhotoData = data
 				}
 			}
-			.sheet(isPresented: $showingCrop) {
+			.fullScreenCover(isPresented: $showingCrop) {
 				if let data = model.capturedPhotoData {
 					PhotoCropView(data: data) { model.capturedPhotoData = $0 }
 				}
