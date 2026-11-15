@@ -10,11 +10,10 @@ builds what, in which files, and how each package proves it works.
 | Phase | Who | What |
 |-------|-----|------|
 | 0. Contract + foundation | lead (Claude) | These docs; WP0 scaffold on `feat/ios-app`; homestacks PR (Zitadel `wardrobe-ios`, oauth2-proxy bearer tokens, AASA skip-auth route, contract doc) |
-| 1. Buildout | 9 agents in parallel (Gemini 3.8 Flash, Antigravity) | WP1–WP9, one branch each: `ios/wp<N>-<slug>` |
+| 1. Buildout | 9 agents in parallel (Gemini 3.8 Flash, Antigravity) | WP1–WP9, one branch each: `ios/wp<N>-<slug>`. Gemini finished WP9; the other eight hit the Antigravity quota mid-way, were checkpointed as WIP commits, and were finished by Composer 2.5 (Cursor) from those checkpoints |
 | 2. Integration | lead | Merge WP branches into `feat/ios-app`, resolve conflicts, full test run on iPhone and iPad simulators |
-| 3. Code review | Composer 2.5 (Cursor) | Review the integrated branch against the contracts; findings go back to the owning WP agent to fix |
-| 4. Black-box review | GPT-6.1 Terra (Codex) | Exercise the built app (simulator, `-fixtures` and `-devServer` against a local server) and CI config against the contract without relying on the implementation's own claims; fix what it finds in its own thread; commit, open the PR, merge |
-| 5. Release | CI | `main` push → TestFlight; manual steps in [setup.md](setup.md) |
+| 3. Black-box review | GPT-6.1 Terra (Codex) | The single review (the planned Composer code review was dropped once Composer did the buildout). Exercise the built app (simulator, `-fixtures` and `-devServer` against a local server) and CI config against the contract without relying on the implementation's own claims; fix what it finds in its own thread; commit, open the PR, merge |
+| 4. Release | CI | `main` push → TestFlight; manual steps in [setup.md](setup.md) |
 
 ## Ground rules for every work package
 
@@ -364,13 +363,8 @@ tests) natively.
    renders, navigation between routes works.
 4. Collect contract change requests from WP reports; apply or reject them.
 
-## Review gates
+## Review gate
 
-- **Composer 2.5 (code review)**: correctness against the contract,
-  concurrency (Sendable, main-actor isolation, cancellation), auth/token
-  handling, upload resumability, error handling, iPad layouts, test
-  quality, CI security (secrets never echoed, key deleted, pinned actions).
-  Findings are fixed by the owning WP agent.
 - **GPT-6.1 Terra (black-box)**: treats the app as a product: builds and runs
   it on iPhone and iPad simulators with `-fixtures` and against a local
   `AUTH_MODE=dev` server (`-devServer`), exercises every screen in the
