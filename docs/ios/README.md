@@ -37,6 +37,10 @@ iPhone / iPad                         Centerpoint (wardrobe-system pod)
   converted to JPEG on the device, queued on disk and uploaded with presigned
   PUTs that survive app restarts and dead zones in the loft. Display images
   come through `GET /api/photos/{id}/{variant}` redirects, cached on disk.
+- **Cropping**: item creation and packing use the full-screen
+  [Mantis](https://github.com/guoyingtao/Mantis) editor (MIT, pinned in
+  `ios/project.yml`) for draggable crop edges, pan/zoom, rotation and aspect
+  ratios. “Use original” keeps the input bytes; a confirmed crop becomes JPEG.
 - **QR labels**: the in-app scanner (VisionKit) and universal links both
   resolve `https://wardrobe.vidur.xyz/l/<ownerId>/<code>`; the server serves
   `/.well-known/apple-app-site-association` for that.

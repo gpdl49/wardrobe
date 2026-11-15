@@ -20,6 +20,9 @@ settings:
     WARDROBE_OIDC_ISSUER: https://z.vidur.xyz
     WARDROBE_OIDC_CLIENT_ID: ""
 packages:
+  Mantis:
+    url: https://github.com/guoyingtao/Mantis-spm.git
+    exactVersion: 3.1.1
   WardrobeKit:
     path: Packages/WardrobeKit
 targets:
@@ -30,6 +33,7 @@ targets:
       - path: App/Sources
       - path: App/Resources
     dependencies:
+      - package: Mantis
       - package: WardrobeKit
         product: WardrobeKit
       - package: WardrobeKit
