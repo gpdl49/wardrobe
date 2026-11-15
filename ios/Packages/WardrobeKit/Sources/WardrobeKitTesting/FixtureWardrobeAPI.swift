@@ -13,6 +13,8 @@ public actor FixtureWardrobeAPI: WardrobeAPI {
 	public var locations: [LocationDTO]
 	public var categories: [CategoryDTO]
 	public var items: [ItemSummaryDTO]
+	public var sessions: [PackingSessionDTO] = []
+	public var sessionItemIDs: [ID: [ID]] = [:]
 	/// Calls made, as "METHOD path", for assertions.
 	public private(set) var calls: [String] = []
 	/// When set, the next call throws it.
@@ -137,6 +139,11 @@ public actor FixtureWardrobeAPI: WardrobeAPI {
 		let loc = body.locationId.flatMap { id in locations.first { $0.id == id }?.ref }
 		let item = ItemSummaryDTO(id: UUID().uuidString.lowercased(), ownerId: body.ownerId ?? me.id, access: .owner, name: body.name, brand: body.brand, size: body.size, seasons: body.seasons ?? [], status: body.status ?? .active, location: loc, notes: body.notes, tags: body.tags ?? [], createdAt: now, updatedAt: now)
 		items.append(item)
+		if let sid = body.sessionId {
+			var current = sessionItemIDs[sid] ?? []
+			current.append(item.id)
+			sessionItemIDs[sid] = current
+		}
 		return item
 	}
 
@@ -169,6 +176,13 @@ public actor FixtureWardrobeAPI: WardrobeAPI {
 			if let k = to?.kind { items[i].status = (k == .bag || k == .suitcase) ? .stored : (k == .closet || k == .drawer) ? .active : items[i].status }
 			n += 1
 		}
+		if let sid = body.sessionId {
+			var current = sessionItemIDs[sid] ?? []
+			for id in body.itemIds where !current.contains(id) {
+				current.append(id)
+			}
+			sessionItemIDs[sid] = current
+		}
 		return MoveItemsResult(moved: n)
 	}
 
@@ -193,10 +207,36 @@ public actor FixtureWardrobeAPI: WardrobeAPI {
 
 	public func createSession(_ body: CreateSessionRequest, idempotencyKey: String) async throws -> PackingSessionDTO {
 		try record("POST /sessions")
-		return PackingSessionDTO(id: UUID().uuidString.lowercased(), ownerId: me.id, access: .owner, mode: body.mode, locationId: body.locationId, startedAt: now, endedAt: nil)
+		let session = PackingSessionDTO(id: UUID().uuidString.lowercased(), ownerId: me.id, access: .owner, mode: body.mode, locationId: body.locationId, startedAt: now, endedAt: nil)
+		sessions.append(session)
+		return session
 	}
-	public func session(id: ID) async throws -> PackingSessionDetailDTO { try record("GET /sessions/\(id)"); throw Self.unimplemented("session") }
-	public func endSession(id: ID) async throws -> PackingSessionDTO { try record("POST /sessions/\(id)/end"); throw Self.unimplemented("endSession") }
+	public func session(id: ID) async throws -> PackingSessionDetailDTO {
+		try record("GET /sessions/\(id)")
+		guard let sess = sessions.first(where: { $0.id == id }) else {
+			throw APIError(status: 404, error: "not_found", message: "Session not found")
+		}
+		let loc = locations.first(where: { $0.id == sess.locationId })?.ref ?? LocationRef(id: sess.locationId, kind: .other, code: "LOC", name: "Location")
+		let movedItems: [ItemSummaryDTO]
+		if let ids = sessionItemIDs[id] {
+			movedItems = items.filter { ids.contains($0.id) }
+		} else {
+			movedItems = items.filter { $0.location?.id == sess.locationId }
+		}
+		return PackingSessionDetailDTO(
+			id: sess.id, ownerId: sess.ownerId, access: sess.access, mode: sess.mode,
+			locationId: sess.locationId, startedAt: sess.startedAt, endedAt: sess.endedAt,
+			location: loc, items: movedItems
+		)
+	}
+	public func endSession(id: ID) async throws -> PackingSessionDTO {
+		try record("POST /sessions/\(id)/end")
+		guard let idx = sessions.firstIndex(where: { $0.id == id }) else {
+			throw APIError(status: 404, error: "not_found", message: "Session not found")
+		}
+		sessions[idx].endedAt = now
+		return sessions[idx]
+	}
 
 	public func shares() async throws -> [ShareDTO] { try record("GET /shares"); return [] }
 	public func createShare(_ body: CreateShareRequest) async throws -> ShareDTO { try record("POST /shares"); throw Self.unimplemented("createShare") }
