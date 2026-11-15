@@ -316,6 +316,11 @@ export interface OutfitDetailDto extends OutfitSummaryDto {
 	 * and a null location.
 	 */
 	items: ItemSummaryDto[];
+	/**
+	 * Ids of the items the caller can open with GET /api/items/{id}. The rest
+	 * are visible only through this outfit.
+	 */
+	readableItemIds: string[];
 	/** Uploads and Immich links together, oldest first. */
 	photos: OutfitPhotoDto[];
 	/** Empty unless the caller owns the outfit. */

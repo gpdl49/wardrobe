@@ -42,6 +42,7 @@ const outfit: OutfitDetailDto = {
 	createdAt: "2026-01-01",
 	updatedAt: "2026-01-01",
 	items: [],
+	readableItemIds: [],
 	photos: [photo],
 	shares: [],
 };

@@ -497,6 +497,7 @@ extension FixtureWardrobeAPI {
 		if let ids = body.itemIds {
 			let selected = ids.compactMap { id in items.first { $0.id == id } }
 			outfitRecords[i].items = selected
+			outfitRecords[i].readableItemIds = selected.map(\.id)
 			outfitRecords[i].itemCount = selected.count
 			outfitRecords[i].previewItems = selected.map {
 				OutfitItemRef(id: $0.id, name: $0.name, coverPhoto: $0.coverPhoto)

@@ -25,6 +25,9 @@ export const outfitInclude = {
 type Row = Prisma.OutfitGetPayload<{ include: typeof outfitInclude }>;
 export function presentOutfit(row: Row, ctx: AccessContext) {
 	const access = requireRead(accessToOutfit(ctx, row), "Outfit");
+	const readableItemIds = row.items
+		.filter(({ item }) => accessToItem(ctx, item))
+		.map(({ item }) => item.id);
 	const items = row.items.map(({ item }) => {
 		if (accessToItem(ctx, item)) return toItemSummaryDto(item, ctx);
 		const wardrobes = new Map(ctx.wardrobes);
@@ -88,6 +91,7 @@ export function presentOutfit(row: Row, ctx: AccessContext) {
 		updatedAt: row.updatedAt.toISOString(),
 		owner: row.owner,
 		items,
+		readableItemIds,
 		photos,
 		shares:
 			access === "owner"
@@ -100,6 +104,7 @@ export function presentOutfit(row: Row, ctx: AccessContext) {
 	};
 }
 export function summaryOutfit(row: Row, ctx: AccessContext) {
-	const { owner, items, photos, shares, ...summary } = presentOutfit(row, ctx);
+	const { owner, items, readableItemIds, photos, shares, ...summary } =
+		presentOutfit(row, ctx);
 	return summary;
 }

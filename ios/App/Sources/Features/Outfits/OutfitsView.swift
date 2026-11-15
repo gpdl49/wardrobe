@@ -161,7 +161,7 @@ struct OutfitDetailView: View {
 		Section("Items") {
 			if outfit.items.isEmpty { Text("No items").foregroundStyle(.secondary) }
 			ForEach(outfit.items) { item in
-				if OutfitDetailModel.canOpen(item) {
+				if OutfitDetailModel.canOpen(item, in: outfit) {
 					NavigationLink(value: Route.item(item.id)) { itemRow(item) }
 				} else { itemRow(item) }
 			}

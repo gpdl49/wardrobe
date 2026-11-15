@@ -49,10 +49,14 @@ import WardrobeKitTesting
 		let share = try #require(model.outfit?.shares.first)
 		await model.revoke(share)
 		#expect(model.outfit?.shares.isEmpty == true)
+		var outfit = try #require(model.outfit)
 		let privateItem = ItemSummaryDTO(id: "private", ownerId: "other", access: .view, createdAt: .now, updatedAt: .now)
-		#expect(!OutfitDetailModel.canOpen(privateItem))
-		var ownItem = privateItem; ownItem.access = .owner
-		#expect(OutfitDetailModel.canOpen(ownItem))
+		var readableItem = privateItem; readableItem.id = "readable"
+		outfit.items = [privateItem, readableItem]
+		outfit.readableItemIds = [readableItem.id]
+		// Both are view-only with no location; only the server's flag tells them apart.
+		#expect(!OutfitDetailModel.canOpen(privateItem, in: outfit))
+		#expect(OutfitDetailModel.canOpen(readableItem, in: outfit))
 		let router = Router(); router.open(.outfit("id")); router.open(.suggest)
 		#expect(router.path(.outfits) == [.outfit("id"), .suggest])
 	}

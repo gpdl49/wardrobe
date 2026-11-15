@@ -63,6 +63,7 @@ describeWithDb("outfits API", () => {
 		await share(TEST_USER, THIRD_USER, "view", location.id);
 		const detail = await json<{
 			items: { access: string; location: unknown }[];
+			readableItemIds: string[];
 		}>(
 			await get(
 				apiRequest("/", { user: OTHER_USER }),
@@ -70,6 +71,11 @@ describeWithDb("outfits API", () => {
 			),
 		);
 		expect(detail.items[0]).toMatchObject({ access: "view", location: null });
+		expect(detail.readableItemIds).toEqual([]);
+		const own = await json<{ readableItemIds: string[] }>(
+			await get(apiRequest("/"), routeParams({ id: outfit.id })),
+		);
+		expect(own.readableItemIds).toEqual([item.id]);
 		const result = await json<{ outfits: { id: string }[] }>(
 			await list(
 				apiRequest(`/api/outfits?owner=${await userId()}`, {

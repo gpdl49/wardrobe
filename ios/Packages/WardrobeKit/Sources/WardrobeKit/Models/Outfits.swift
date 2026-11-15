@@ -118,13 +118,15 @@ public struct OutfitDetailDTO: Codable, Hashable, Sendable, Identifiable {
 	public var updatedAt: Date
 	public var owner: UserRef
 	public var items: [ItemSummaryDTO]
+	/// Items the viewer can open on their own (`GET /api/items/{id}`); the rest are visible only through this outfit.
+	public var readableItemIds: [ID]
 	public var photos: [OutfitPhotoDTO]
 	public var shares: [OutfitShareDTO]
 	public init(
 		id: ID, ownerId: ID, access: Access, name: String, notes: String? = nil, seasons: [Season],
 		tags: [String], itemCount: Int, previewItems: [OutfitItemRef], cover: OutfitPhotoDTO? = nil,
-		createdAt: Date, updatedAt: Date, owner: UserRef, items: [ItemSummaryDTO], photos: [OutfitPhotoDTO],
-		shares: [OutfitShareDTO]
+		createdAt: Date, updatedAt: Date, owner: UserRef, items: [ItemSummaryDTO], readableItemIds: [ID]? = nil,
+		photos: [OutfitPhotoDTO], shares: [OutfitShareDTO]
 	) {
 		self.id = id
 		self.ownerId = ownerId
@@ -140,6 +142,7 @@ public struct OutfitDetailDTO: Codable, Hashable, Sendable, Identifiable {
 		self.updatedAt = updatedAt
 		self.owner = owner
 		self.items = items
+		self.readableItemIds = readableItemIds ?? items.map(\.id)
 		self.photos = photos
 		self.shares = shares
 	}

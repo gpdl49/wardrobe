@@ -75,7 +75,10 @@ final class OutfitDetailModel {
 		do { try await api.deleteOutfitShare(outfitId: outfitId, shareId: share.id); await load() }
 		catch { errorMessage = outfitErrorMessage(error, appModel: appModel) }
 	}
-	static func canOpen(_ item: ItemSummaryDTO) -> Bool { item.location != nil || item.access.canEdit }
+	/// Only items the viewer can open on their own; the rest are visible only through the outfit.
+	static func canOpen(_ item: ItemSummaryDTO, in outfit: OutfitDetailDTO) -> Bool {
+		outfit.readableItemIds.contains(item.id)
+	}
 }
 
 extension String {
