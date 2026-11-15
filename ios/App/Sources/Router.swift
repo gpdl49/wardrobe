@@ -9,10 +9,12 @@ enum Route: Hashable {
 	/// A QR label: resolve `code` in `ownerId`'s wardrobe.
 	case label(ownerId: ID, code: String)
 	case session(ID)
+	case outfit(ID)
+	case suggest
 }
 
 enum AppTab: String, Hashable, CaseIterable {
-	case catalogue, locations, pack, unpack, sharing, settings
+	case catalogue, outfits, locations, pack, unpack, sharing, settings
 }
 
 /// Parses deep links and scanned QR text (docs/ios/api-contract.md
@@ -24,14 +26,20 @@ enum DeepLink {
 	static func route(from url: URL, baseURL: URL) -> Route? {
 		let parts = url.pathComponents.filter { $0 != "/" }
 		if url.scheme == "https" || url.scheme == "http" {
-			guard url.host()?.lowercased() == baseURL.host()?.lowercased(),
-				parts.count == 3, parts[0] == "l", !parts[1].isEmpty,
+			guard url.host()?.lowercased() == baseURL.host()?.lowercased() else { return nil }
+            if parts.count == 2 && parts[0] == "outfits" {
+                return parts[1] == "suggest" ? .suggest : .outfit(parts[1])
+            }
+            guard parts.count == 3, parts[0] == "l", !parts[1].isEmpty,
 				let code = parts[2].removingPercentEncoding.flatMap(normalizeLocationCode)
 			else { return nil }
 			return .label(ownerId: parts[1].lowercased(), code: code)
 		}
-		if url.scheme == "xyz.vidur.wardrobe", let host = url.host(), parts.count == 1 {
+		if url.scheme == "xyz.vidur.wardrobe", let host = url.host() {
+            if host == "suggest" && parts.isEmpty { return .suggest }
+            guard parts.count == 1 else { return nil }
 			switch host {
+			case "outfit": return .outfit(parts[0])
 			case "item": return .item(parts[0])
 			case "location": return .location(parts[0])
 			default: return nil
@@ -70,6 +78,7 @@ final class Router {
 		case .item: target = tab == .locations ? .locations : .catalogue
 		case .location, .label: target = .locations
 		case .session: target = tab
+		case .outfit, .suggest: target = .outfits
 		}
 		tab = target
 		paths[target, default: []].append(route)

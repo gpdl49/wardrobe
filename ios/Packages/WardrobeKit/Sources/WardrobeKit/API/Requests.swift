@@ -229,11 +229,12 @@ public func normalizeLocationCode(_ raw: String) -> String? {
 /// POST /api/photos. The app only uploads JPEG.
 public struct CreatePhotoRequest: Encodable, Hashable, Sendable {
 	public var itemId: ID?
+	public var outfitId: ID?
 	public var kind: PhotoKind
 	public var contentType: String
 	public var size: Int
-	public init(itemId: ID?, kind: PhotoKind, contentType: String = "image/jpeg", size: Int) {
-		self.itemId = itemId; self.kind = kind; self.contentType = contentType; self.size = size
+	public init(itemId: ID? = nil, outfitId: ID? = nil, kind: PhotoKind, contentType: String = "image/jpeg", size: Int) {
+		self.itemId = itemId; self.outfitId = outfitId; self.kind = kind; self.contentType = contentType; self.size = size
 	}
 }
 

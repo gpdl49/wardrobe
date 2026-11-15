@@ -255,6 +255,79 @@ public final class LiveWardrobeAPI: WardrobeAPI, Sendable {
 		try await request(method: "GET", path: "/api/shared-with-me")
 	}
 
+	// MARK: - Outfits, Immich and suggestions
+	public func outfits(_ query: OutfitQuery) async throws -> OutfitListDTO {
+		return try await request(method: "GET", path: "/api/outfits", queryItems: query.queryItems)
+	}
+	public func sharedOutfits() async throws -> [OutfitSummaryDTO] {
+		return try await request(method: "GET", path: "/api/outfits/shared-with-me")
+	}
+	public func outfit(id: ID) async throws -> OutfitDetailDTO {
+		return try await request(method: "GET", path: "/api/outfits/\(escapeSegment(id))")
+	}
+	public func createOutfit(_ body: CreateOutfitRequest, idempotencyKey: String) async throws -> OutfitDetailDTO {
+		return try await request(method: "POST", path: "/api/outfits", bodyData: try JSONEncoder.wardrobe.encode(body), idempotencyKey: idempotencyKey)
+	}
+	public func updateOutfit(id: ID, _ body: UpdateOutfitRequest) async throws -> OutfitDetailDTO {
+		return try await request(method: "PATCH", path: "/api/outfits/\(escapeSegment(id))", bodyData: try JSONEncoder.wardrobe.encode(body))
+	}
+	public func deleteOutfit(id: ID) async throws {
+		try await requestVoid(method: "DELETE", path: "/api/outfits/\(escapeSegment(id))")
+	}
+	public func createOutfitShare(outfitId: ID, _ body: CreateOutfitShareRequest) async throws -> OutfitShareDTO {
+		return try await request(method: "POST", path: "/api/outfits/\(escapeSegment(outfitId))/shares", bodyData: try JSONEncoder.wardrobe.encode(body))
+	}
+	public func deleteOutfitShare(outfitId: ID, shareId: ID) async throws {
+		try await requestVoid(method: "DELETE", path: "/api/outfits/\(escapeSegment(outfitId))/shares/\(escapeSegment(shareId))")
+	}
+	public func immichStatus() async throws -> ImmichStatusDTO {
+		return try await request(method: "GET", path: "/api/immich")
+	}
+	public func connectImmich(_ body: ConnectImmichRequest) async throws -> ImmichStatusDTO {
+		return try await request(method: "PUT", path: "/api/immich", bodyData: try JSONEncoder.wardrobe.encode(body))
+	}
+	public func disconnectImmich() async throws {
+		try await requestVoid(method: "DELETE", path: "/api/immich")
+	}
+	public func immichAssets(_ query: ImmichAssetQuery) async throws -> ImmichAssetListDTO {
+		return try await request(method: "GET", path: "/api/immich/assets", queryItems: query.queryItems)
+	}
+	public func linkImmichAssets(outfitId: ID, _ body: LinkImmichAssetsRequest) async throws -> [OutfitPhotoDTO] {
+		return try await request(method: "POST", path: "/api/outfits/\(escapeSegment(outfitId))/immich-assets", bodyData: try JSONEncoder.wardrobe.encode(body))
+	}
+	public func unlinkImmichAsset(outfitId: ID, linkId: ID) async throws {
+		try await requestVoid(method: "DELETE", path: "/api/outfits/\(escapeSegment(outfitId))/immich-assets/\(escapeSegment(linkId))")
+	}
+	public func suggestionRuns(owner: ID?) async throws -> [SuggestionRunDTO] {
+		return try await request(method: "GET", path: "/api/suggestion-runs", queryItems: owner.map { [URLQueryItem(name: "owner", value: $0)] } ?? [])
+	}
+	public func suggestionRun(id: ID) async throws -> SuggestionRunDTO {
+		return try await request(method: "GET", path: "/api/suggestion-runs/\(escapeSegment(id))")
+	}
+	public func createSuggestionRun(_ body: CreateSuggestionRunRequest, idempotencyKey: String) async throws -> SuggestionRunDTO {
+		return try await request(method: "POST", path: "/api/suggestion-runs", bodyData: try JSONEncoder.wardrobe.encode(body), idempotencyKey: idempotencyKey)
+	}
+	public func dismissSuggestion(id: ID) async throws -> OutfitSuggestionDTO {
+		return try await request(method: "POST", path: "/api/outfit-suggestions/\(escapeSegment(id))/dismiss")
+	}
+	public func queueBulkAnalyses(_ body: BulkItemsRequest) async throws -> BulkAnalysesDTO {
+		return try await request(method: "POST", path: "/api/items/analyses", bodyData: try JSONEncoder.wardrobe.encode(body))
+	}
+	public func applyBulkTags(_ body: BulkItemsRequest) async throws -> BulkApplyTagsDTO {
+		return try await request(method: "POST", path: "/api/items/analyses/apply-tags", bodyData: try JSONEncoder.wardrobe.encode(body))
+	}
+
+ public func immichThumbnail(assetId: ID) async throws -> Data? {
+  try await imageBytes(path: "/api/immich/assets/\(escapeSegment(assetId))/thumb")
+ }
+ public func outfitImmichImage(outfitId: ID, linkId: ID, variant: PhotoVariant) async throws -> Data? {
+  try await imageBytes(path: "/api/outfits/\(escapeSegment(outfitId))/immich-assets/\(escapeSegment(linkId))/\(escapeSegment(variant.rawValue))")
+ }
+ private func imageBytes(path: String) async throws -> Data? {
+  do { return try await send(method: "GET", path: path).0 }
+  catch let error as APIError where error.status == 404 { return nil }
+ }
+
 	// MARK: - Private Helpers
 
 	private func escapeSegment(_ segment: String) -> String {

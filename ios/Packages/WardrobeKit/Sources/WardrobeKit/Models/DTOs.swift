@@ -135,6 +135,7 @@ public struct PhotoDTO: Codable, Hashable, Sendable, Identifiable {
 	public var ownerId: ID
 	public var access: Access
 	public var itemId: ID?
+	public var outfitId: ID?
 	public var kind: PhotoKind
 	public var status: PhotoStatus
 	public var contentType: String
@@ -148,13 +149,13 @@ public struct PhotoDTO: Codable, Hashable, Sendable, Identifiable {
 	public var urls: [String: String]
 
 	public init(
-		id: ID, ownerId: ID, access: Access, itemId: ID?, kind: PhotoKind,
+		id: ID, ownerId: ID, access: Access, itemId: ID?, outfitId: ID? = nil, kind: PhotoKind,
 		status: PhotoStatus, contentType: String, size: Int, width: Int? = nil,
 		height: Int? = nil, blurhash: String? = nil, createdAt: Date,
 		urls: [String: String] = [:]
 	) {
 		self.id = id; self.ownerId = ownerId; self.access = access
-		self.itemId = itemId; self.kind = kind; self.status = status
+		self.itemId = itemId; self.outfitId = outfitId; self.kind = kind; self.status = status
 		self.contentType = contentType; self.size = size; self.width = width
 		self.height = height; self.blurhash = blurhash; self.createdAt = createdAt
 		self.urls = urls
@@ -404,9 +405,10 @@ public struct MeDTO: Codable, Hashable, Sendable, Identifiable {
 	public var username: String?
 	public var groups: [String]
 	public var isAdmin: Bool
-	public init(id: ID, sub: String, email: String?, username: String?, groups: [String], isAdmin: Bool) {
+	public var features: FeaturesDTO?
+	public init(id: ID, sub: String, email: String?, username: String?, groups: [String], isAdmin: Bool, features: FeaturesDTO? = nil) {
 		self.id = id; self.sub = sub; self.email = email; self.username = username
-		self.groups = groups; self.isAdmin = isAdmin
+		self.groups = groups; self.isAdmin = isAdmin; self.features = features
 	}
 	/// Username, else email, else the subject.
 	public var displayName: String { username ?? email ?? sub }
