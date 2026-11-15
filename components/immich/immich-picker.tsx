@@ -66,11 +66,11 @@ export function ImmichPicker({
 		setError(null);
 		try {
 			await onPick(selected);
+			onOpenChange(false);
 		} catch (err) {
 			setError(err);
 		} finally {
 			setBusy(false);
-			onOpenChange(false);
 		}
 	}
 	return (

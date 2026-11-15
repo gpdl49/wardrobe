@@ -103,5 +103,6 @@ it("shows a rejected selection", async () => {
 	await user.click(await screen.findByRole("button", { name: "a.jpg" }));
 	await user.click(screen.getByRole("button", { name: "Add 1 selected" }));
 	expect(await screen.findByRole("alert")).toHaveTextContent("Could not link");
-	expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+	expect(screen.getByRole("dialog")).toBeInTheDocument();
+	expect(screen.getByRole("button", { name: "Add 1 selected" })).toBeEnabled();
 });
