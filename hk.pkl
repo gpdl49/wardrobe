@@ -11,6 +11,13 @@ steps {
 }
 
 hooks {
+  // release-please reads commit messages to pick versions and write the
+  // changelog, so they must be Conventional Commits (see AGENTS.md).
+  ["commit-msg"] {
+    steps {
+      ["conventional-commit"] = Builtins.check_conventional_commit
+    }
+  }
   ["pre-commit"] {
     timeout = "3m"
   }

@@ -8,11 +8,13 @@ on:
       - "ios/**"
       - "docs/ios/**"
       - ".github/workflows/ios.yaml"
+      - ".release-please-manifest.json"
   pull_request:
     paths:
       - "ios/**"
       - "docs/ios/**"
       - ".github/workflows/ios.yaml"
+      - ".release-please-manifest.json"
   workflow_dispatch:
 
 permissions:
@@ -129,6 +131,18 @@ jobs:
           cd ios
           xcodegen generate --quiet
 
+      # MARKETING_VERSION comes from ios/project.yml (bumped by release-please),
+      # not from the xcodebuild command line.
+      - name: Check marketing version
+        run: |
+          ios=$(sed -nE 's/^    MARKETING_VERSION: "([^"]+)".*/\1/p' ios/project.yml)
+          manifest=$(node -p 'require("./.release-please-manifest.json")["."]')
+          if [ "$ios" != "$manifest" ]; then
+            echo "::error::ios/project.yml MARKETING_VERSION ($ios) does not match manifest ($manifest)"
+            exit 1
+          fi
+          echo "marketing_version=$ios" >> "$GITHUB_ENV"
+
       - name: Write App Store Connect API key
         env:
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
@@ -178,6 +192,11 @@ jobs:
         if: always()
         run: |
           rm -f "$RUNNER_TEMP/AuthKey.p8"
+
+      - name: TestFlight summary
+        if: success()
+        run: |
+          echo "Uploaded $marketing_version ($GITHUB_RUN_NUMBER) to TestFlight" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload archive logs on failure
         if: failure()
