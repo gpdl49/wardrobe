@@ -1,0 +1,140 @@
+# XcodeGen spec; `mise run ios:generate` writes Wardrobe.xcodeproj (gitignored).
+name: Wardrobe
+options:
+  bundleIdPrefix: xyz.vidur
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+settings:
+  base:
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: 2J2LYH5QBS
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    # Overridden by CI (docs/ios/api-contract.md "Names").
+    WARDROBE_BASE_URL: https://wardrobe.vidur.xyz
+    WARDROBE_OIDC_ISSUER: https://z.vidur.xyz
+    WARDROBE_OIDC_CLIENT_ID: ""
+packages:
+  WardrobeKit:
+    path: Packages/WardrobeKit
+targets:
+  Wardrobe:
+    type: application
+    platform: iOS
+    sources:
+      - path: App/Sources
+      - path: App/Resources
+    dependencies:
+      - package: WardrobeKit
+        product: WardrobeKit
+      - package: WardrobeKit
+        product: WardrobeKitTesting
+    entitlements:
+      path: App/Wardrobe.entitlements
+      properties:
+        com.apple.developer.associated-domains:
+          - applinks:wardrobe.vidur.xyz
+          - webcredentials:wardrobe.vidur.xyz
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Wardrobe
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSCameraUsageDescription: Wardrobe uses the camera to photograph clothes and scan location labels.
+        NSPhotoLibraryUsageDescription: Wardrobe adds photos of your clothes from your library.
+        NSPhotoLibraryAddUsageDescription: Wardrobe saves location QR labels to your photos.
+        CFBundleURLTypes:
+          - CFBundleURLName: xyz.vidur.wardrobe
+            CFBundleURLSchemes:
+              - xyz.vidur.wardrobe
+        # http://localhost for DEBUG runs against `aubr dev` (-devServer).
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        WardrobeBaseURL: $(WARDROBE_BASE_URL)
+        WardrobeOIDCIssuer: $(WARDROBE_OIDC_ISSUER)
+        WardrobeOIDCClientID: $(WARDROBE_OIDC_CLIENT_ID)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: xyz.vidur.wardrobe
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+  WardrobeTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: AppTests
+    # WardrobeKit and WardrobeKitTesting come from the host app (BUNDLE_LOADER);
+    # linking them here again loads every class twice and breaks `as?` casts.
+    dependencies:
+      - target: Wardrobe
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: xyz.vidur.wardrobe.tests
+  WardrobeUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: Wardrobe
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: xyz.vidur.wardrobe.uitests
+schemes:
+  Wardrobe:
+    build:
+      targets:
+        Wardrobe: all
+        WardrobeTests: [test]
+        WardrobeUITests: [test]
+    test:
+      targets:
+        - WardrobeTests
+        - WardrobeUITests
+      gatherCoverageData: false
+    archive:
+      config: Release
+  WardrobeLocalReview:
+    build:
+      targets:
+        Wardrobe: all
+        WardrobeUITests: [test]
+    test:
+      targets:
+        - WardrobeUITests
+      environmentVariables:
+        WARDROBE_LIVE_REVIEW: "1"
+  WardrobeOfflineReview:
+    build:
+      targets:
+        Wardrobe: all
+        WardrobeUITests: [test]
+    test:
+      targets:
+        - WardrobeUITests
+      environmentVariables:
+        WARDROBE_LIVE_REVIEW: "1"
+        WARDROBE_OFFLINE_REVIEW: "1"

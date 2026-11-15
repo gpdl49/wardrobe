@@ -5,7 +5,30 @@ idiomatic_version_file_enable_tools = ["node"]
 aube = "2.9.0"
 hk = "2.11.1"
 jactionlint = "2.5.0"
+xcodegen = "2.46.0"
 
 [tasks.setup]
 description = "Install dependencies and configure git hooks"
 run = "aube install && hk install"
+
+# iOS app (ios/, docs/ios/). Simulator names match Xcode 27's iOS 26.5 runtime.
+[tasks."ios:generate"]
+description = "Generate ios/Wardrobe.xcodeproj from ios/project.yml"
+dir = "ios"
+run = "xcodegen generate --quiet"
+
+[tasks."ios:test-kit"]
+description = "Run WardrobeKit tests on the Mac (swift test)"
+dir = "ios/Packages/WardrobeKit"
+run = "swift test"
+
+[tasks."ios:test"]
+description = "Build the app and run its tests on the iPhone and iPad simulators"
+depends = ["ios:generate"]
+dir = "ios"
+run = """
+xcodebuild test -project Wardrobe.xcodeproj -scheme Wardrobe \
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
+  -destination 'platform=iOS Simulator,name=iPad Pro 13-inch (M5)' \
+  -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=NO -quiet
+"""
