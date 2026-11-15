@@ -136,3 +136,8 @@ builds on `ubuntu-latest`; on `main` it then builds and pushes
 `ghcr.io/gpdl49/wardrobe:main` and `:main-<sha>` with buildah on the
 `homestacks-runners` ARC runners. Flux image automation in homestacks rolls it
 out.
+
+## iOS app
+
+Wardrobe has a companion native iOS app for iPhone and iPad (SwiftUI, iOS 26+).
+See [docs/ios/](docs/ios/) for architecture, development plan, and setup.

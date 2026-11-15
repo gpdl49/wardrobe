@@ -49,6 +49,29 @@ const envSchema = z
 			z.enum(["true", "false"]).transform((v) => v === "true"),
 			"true",
 		),
+		/** Apple App IDs (<team>.<bundle>) for universal links (AASA). */
+		IOS_APP_IDS: optional(
+			z
+				.string()
+				.transform((v) =>
+					v
+						.split(",")
+						.map((s) => s.trim())
+						.filter(Boolean),
+				)
+				.pipe(
+					z
+						.array(
+							z
+								.string()
+								.regex(
+									/^[A-Z0-9]{10}\.[A-Za-z0-9.-]+$/,
+									"each app ID must match <team>.<bundle>",
+								),
+						)
+						.min(1, "IOS_APP_IDS cannot be empty"),
+				),
+		),
 	})
 	.superRefine((env, ctx) => {
 		if (env.AUTH_MODE === "dev" && env.NODE_ENV === "production") {

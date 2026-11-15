@@ -1,0 +1,189 @@
+name: iOS
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "ios/**"
+      - "docs/ios/**"
+      - ".github/workflows/ios.yaml"
+  pull_request:
+    paths:
+      - "ios/**"
+      - "docs/ios/**"
+      - ".github/workflows/ios.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Select Xcode 27
+        run: |
+          XCODE_APP=$(find /Applications -maxdepth 1 -name "Xcode_27*.app" 2>/dev/null | sort -V | tail -n 1)
+          if [ -n "$XCODE_APP" ]; then
+            echo "Selecting $XCODE_APP"
+            sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          fi
+          xcodebuild -version
+
+      - uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
+        with:
+          install: false
+
+      - name: Install xcodegen
+        run: mise install xcodegen@2.46.0
+
+      - name: Test WardrobeKit
+        run: |
+          cd ios/Packages/WardrobeKit
+          swift test
+
+      - name: Generate Xcode project
+        run: |
+          cd ios
+          xcodegen generate --quiet
+
+      - name: Test on iPhone simulator
+        run: |
+          cd ios
+          xcodebuild test -project Wardrobe.xcodeproj -scheme Wardrobe \
+            -destination 'platform=iOS Simulator,name=iPhone 17' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO -quiet
+
+      - name: Build for iPad simulator
+        run: |
+          cd ios
+          xcodebuild build -project Wardrobe.xcodeproj -scheme Wardrobe \
+            -destination 'platform=iOS Simulator,name=iPad Pro 13-inch (M5)' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO -quiet
+
+  testflight:
+    needs: test
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+    runs-on: macos-26
+    concurrency:
+      group: ios-testflight
+      cancel-in-progress: false
+    steps:
+      - name: Verify secrets and variables
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          IOS_OIDC_CLIENT_ID: ${{ vars.IOS_OIDC_CLIENT_ID }}
+        run: |
+          missing=0
+          if [ -z "$ASC_KEY_ID" ]; then
+            echo "::error::Secret ASC_KEY_ID is missing (docs/ios/setup.md section 4)"
+            missing=1
+          fi
+          if [ -z "$ASC_ISSUER_ID" ]; then
+            echo "::error::Secret ASC_ISSUER_ID is missing (docs/ios/setup.md section 4)"
+            missing=1
+          fi
+          if [ -z "$ASC_KEY_P8" ]; then
+            echo "::error::Secret ASC_KEY_P8 is missing (docs/ios/setup.md section 4)"
+            missing=1
+          fi
+          if [ -z "$IOS_OIDC_CLIENT_ID" ]; then
+            echo "::error::Variable IOS_OIDC_CLIENT_ID is missing (docs/ios/setup.md section 5)"
+            missing=1
+          fi
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Select Xcode 27
+        run: |
+          XCODE_APP=$(find /Applications -maxdepth 1 -name "Xcode_27*.app" 2>/dev/null | sort -V | tail -n 1)
+          if [ -n "$XCODE_APP" ]; then
+            echo "Selecting $XCODE_APP"
+            sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          fi
+          xcodebuild -version
+
+      - uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
+        with:
+          install: false
+
+      - name: Install xcodegen
+        run: mise install xcodegen@2.46.0
+
+      - name: Generate Xcode project
+        run: |
+          cd ios
+          xcodegen generate --quiet
+
+      - name: Write App Store Connect API key
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
+          (umask 077 && printf '%s\n' "$ASC_KEY_P8" > "$KEY_PATH")
+
+      - name: Archive
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          IOS_OIDC_CLIENT_ID: ${{ vars.IOS_OIDC_CLIENT_ID }}
+        run: |
+          KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
+          xcodebuild archive \
+            -project ios/Wardrobe.xcodeproj \
+            -scheme Wardrobe \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Wardrobe.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            WARDROBE_OIDC_CLIENT_ID="$IOS_OIDC_CLIENT_ID" \
+            -quiet
+
+      - name: Export and upload to TestFlight
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Wardrobe.xcarchive" \
+            -exportOptionsPlist ios/ExportOptions.plist \
+            -exportPath "$RUNNER_TEMP/Export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            -quiet
+
+      - name: Clean up App Store Connect API key
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/AuthKey.p8"
+
+      - name: Upload archive logs on failure
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-archive-logs
+          path: |
+            ${{ runner.temp }}/Wardrobe.xcarchive
+            ${{ runner.temp }}/Export
+          if-no-files-found: ignore
