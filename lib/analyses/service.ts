@@ -16,6 +16,7 @@ import {
 	type RerunAnalysesInput,
 	SEASONS,
 } from "@/lib/analyses/schema";
+import { VISION_PROMPT_REVISION } from "@/lib/analyses/vision";
 import type { AnalysisDto, ItemDetailDto } from "@/lib/api/types";
 import type { Viewer } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -258,11 +259,16 @@ export async function bulkQueueAnalyses(
 					kind: { in: ["main", "label"] },
 				},
 			}),
+			// In flight, or done with the current prompt: nothing to do. Done
+			// before VISION_PROMPT_REVISION is stale and is queued again.
 			db().analysis.findFirst({
 				where: {
 					itemId: item.id,
 					kind: "vision",
-					status: { in: ["queued", "running", "done"] },
+					OR: [
+						{ status: { in: ["queued", "running"] } },
+						{ status: "done", createdAt: { gte: VISION_PROMPT_REVISION } },
+					],
 				},
 			}),
 		]);
@@ -274,8 +280,9 @@ export async function bulkQueueAnalyses(
 }
 export async function bulkApplyTags(
 	viewer: Viewer,
-	input: import("@/lib/analyses/schema").BulkAnalysesInput,
+	input: import("@/lib/analyses/schema").BulkApplyInput,
 ) {
+	const fields = new Set(input.fields);
 	const items = await bulkItems(viewer, input);
 	let updated = 0;
 	for (const item of items) {
@@ -286,12 +293,34 @@ export async function bulkApplyTags(
 		if (!analysis) continue;
 		const parsed = itemSuggestionSchema.safeParse(analysis.result ?? {});
 		if (!parsed.success) continue;
+		const suggestion = parsed.data;
+		// Fill only what the item does not have yet: bulk apply never overwrites.
+		const data: Prisma.ItemUpdateInput = {};
+		if (fields.has("pattern") && !item.pattern && suggestion.pattern) {
+			data.pattern = suggestion.pattern;
+		}
+		if (fields.has("material") && !item.material && suggestion.material) {
+			data.material = suggestion.material;
+		}
+		if (
+			fields.has("seasons") &&
+			item.seasons.length === 0 &&
+			suggestion.seasons?.length
+		) {
+			const chosen = suggestion.seasons;
+			data.seasons = SEASONS.filter((s) => chosen.includes(s));
+		}
 		await db().$transaction(async (tx) => {
-			const ids = await ensureTags(tx, item.ownerId, parsed.data.tags ?? []);
-			await tx.itemTag.createMany({
-				data: ids.map((tagId) => ({ itemId: item.id, tagId })),
-				skipDuplicates: true,
-			});
+			if (fields.has("tags") && suggestion.tags?.length) {
+				const ids = await ensureTags(tx, item.ownerId, suggestion.tags);
+				await tx.itemTag.createMany({
+					data: ids.map((tagId) => ({ itemId: item.id, tagId })),
+					skipDuplicates: true,
+				});
+			}
+			if (Object.keys(data).length > 0) {
+				await tx.item.update({ where: { id: item.id }, data });
+			}
 			await tx.analysis.update({
 				where: { id: analysis.id },
 				data: { appliedAt: new Date() },

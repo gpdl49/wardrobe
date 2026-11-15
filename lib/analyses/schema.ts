@@ -73,3 +73,24 @@ export const bulkAnalysesSchema = z.strictObject({
 	itemIds: z.array(z.uuid()).optional(),
 });
 export type BulkAnalysesInput = z.output<typeof bulkAnalysesSchema>;
+
+/** Fields POST /api/items/analyses/apply-tags can apply. */
+export const BULK_APPLY_FIELDS = [
+	"tags",
+	"pattern",
+	"material",
+	"seasons",
+] as const;
+
+/**
+ * POST /api/items/analyses/apply-tags. Tags are added; pattern, material and
+ * seasons are only filled where the item has none. Default: tags only.
+ */
+export const bulkApplySchema = bulkAnalysesSchema.extend({
+	fields: z
+		.array(z.enum(BULK_APPLY_FIELDS))
+		.min(1)
+		.transform((fields) => [...new Set(fields)])
+		.default(["tags"]),
+});
+export type BulkApplyInput = z.output<typeof bulkApplySchema>;

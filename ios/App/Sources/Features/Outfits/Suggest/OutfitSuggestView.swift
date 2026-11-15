@@ -55,10 +55,16 @@ struct OutfitSuggestView: View {
 				}
 			}
 			if canEdit {
-				Section("Bulk tagging") {
+				Section {
 					Button("Queue tag suggestions") { Task { await model.bulk(queue: true) } }
-					Button("Apply suggested tags") { Task { await model.bulk(queue: false) } }
+					Button("Apply suggestions") { Task { await model.bulk(queue: false) } }
 					if let message = model.bulkMessage { Text(message).foregroundStyle(.secondary) }
+				} header: {
+					Text("Bulk tagging")
+				} footer: {
+					Text(
+						"Analysis reads each item's photos for features such as neckline, collar, sleeve, fit, length and closure. Applying adds the suggested tags and fills in pattern, material and seasons where an item has none; it never replaces what you entered."
+					)
 				}
 				.disabled(model.busy)
 			}

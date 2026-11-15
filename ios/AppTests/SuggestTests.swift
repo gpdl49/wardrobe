@@ -42,11 +42,13 @@ import WardrobeKitTesting
 	}
 
 	@Test func bulkCountsAndValidation() async {
-		let model = OutfitSuggestModel(api: FixtureWardrobeAPI(), ownerId: nil)
+		let api = FixtureWardrobeAPI()
+		let model = OutfitSuggestModel(api: api, ownerId: nil)
 		await model.bulk(queue: true)
 		#expect(model.bulkMessage == "Queued suggestions for 0 items.")
 		await model.bulk(queue: false)
-		#expect(model.bulkMessage == "Applied tags to 0 items.")
+		#expect(model.bulkMessage == "Applied suggestions to 0 items.")
+		#expect(await api.lastBulkApply?.fields == [.tags, .pattern, .material, .seasons])
 		model.prompt = String(repeating: "a", count: 501)
 		await model.submit()
 		#expect(model.runs.isEmpty)

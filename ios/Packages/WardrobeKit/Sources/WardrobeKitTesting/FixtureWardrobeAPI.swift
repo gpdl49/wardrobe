@@ -20,6 +20,8 @@ public actor FixtureWardrobeAPI: WardrobeAPI {
 	public var movements: [MovementDTO] = []
  private var outfitRecords: [OutfitDetailDTO] = []
  private var outfitKeys: [String: ID] = [:]
+	/// The last bulk-apply body, for tests.
+	public private(set) var lastBulkApply: BulkApplyRequest?
  private var runRecords: [SuggestionRunDTO] = []
  private var runKeys: [String: ID] = [:]
  private var connection = ImmichStatusDTO(enabled: true, connected: true, url: "https://immich.example.com", user: ImmichUserDTO(id: "immich-user", email: "me@example.com", name: "Me"))
@@ -637,8 +639,9 @@ extension FixtureWardrobeAPI {
 		try record("POST /items/analyses")
 		return BulkAnalysesDTO(queued: 0)
 	}
-	public func applyBulkTags(_ body: BulkItemsRequest) async throws -> BulkApplyTagsDTO {
+	public func applyBulkTags(_ body: BulkApplyRequest) async throws -> BulkApplyTagsDTO {
 		try record("POST /items/analyses/apply-tags")
+		lastBulkApply = body
 		return BulkApplyTagsDTO(updated: 0)
 	}
 }

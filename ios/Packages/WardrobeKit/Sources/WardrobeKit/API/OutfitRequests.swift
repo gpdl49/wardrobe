@@ -121,6 +121,23 @@ public struct BulkItemsRequest: Codable, Hashable, Sendable {
 	}
 }
 
+/// What `POST /api/items/analyses/apply-tags` applies. Tags are added; the others only fill fields an item has none of.
+public enum BulkApplyField: String, Codable, Hashable, Sendable, CaseIterable {
+	case tags, pattern, material, seasons
+}
+
+/// Body of `POST /api/items/analyses/apply-tags`. Without `fields` the server applies tags only.
+public struct BulkApplyRequest: Codable, Hashable, Sendable {
+	public var ownerId: ID?
+	public var itemIds: [ID]?
+	public var fields: [BulkApplyField]?
+	public init(ownerId: ID? = nil, itemIds: [ID]? = nil, fields: [BulkApplyField]? = nil) {
+		self.ownerId = ownerId
+		self.itemIds = itemIds
+		self.fields = fields
+	}
+}
+
 public struct UpdateOutfitRequest: Encodable, Hashable, Sendable {
 	public var name: String?
 	public var notes: Patch<String>

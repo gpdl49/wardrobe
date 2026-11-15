@@ -116,6 +116,7 @@ export async function listItems(
 				{ brand: contains },
 				{ notes: contains },
 				{ material: contains },
+				{ pattern: contains },
 				{
 					tags: {
 						some: { tag: { name: { contains: query.q.toLowerCase() } } },

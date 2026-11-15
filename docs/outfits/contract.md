@@ -79,8 +79,8 @@ POST   /suggestion-runs                       {ownerId?, prompt?, season?, itemI
 GET    /suggestion-runs/{id}                  -> SuggestionRun (poll until status is done or failed)
 POST   /outfit-suggestions/{id}/dismiss       -> OutfitSuggestion (idempotent; 409 if already saved)
 
-POST   /items/analyses                        {ownerId?, itemIds?} -> 202 {queued: n}   (vision for items with a ready photo and no queued, running or done vision analysis; at most 50 per call)
-POST   /items/analyses/apply-tags             {ownerId?, itemIds?} -> {updated: n}   (adds the tags of each item's newest done vision analysis; marks it applied)
+POST   /items/analyses                        {ownerId?, itemIds?} -> 202 {queued: n}   (vision for items with a ready photo, no queued or running vision analysis and no done one since the current prompt revision; at most 50 per call)
+POST   /items/analyses/apply-tags             {ownerId?, itemIds?, fields?} -> {updated: n}   (from each item's newest done vision analysis: adds its tags, and fills pattern, material and seasons only where the item has none; fields ⊆ tags, pattern, material, seasons, default [tags]; marks it applied)
 ```
 
 Every Immich route answers 409 `immich_disabled` when Immich is not enabled,
@@ -103,6 +103,7 @@ without one. An Immich failure (network, 5xx, revoked key) is 502
 - **Saving a suggestion.** `POST /outfits` with `suggestionId` creates the outfit (the request's own `name` and `itemIds` win over the proposal's) and marks the suggestion `saved` with its `outfitId`. A suggestion already saved is 409. Dismissing sets `dismissed`.
 - **Bulk tagging.** Both routes need edit access to each item; items the caller cannot edit are skipped, not errors. Without `itemIds` they cover the whole wardrobe (`ownerId`, default the caller).
 - **Tag vocabulary.** The vision prompt lists the owner's fifty most used tags and asks the model to reuse them where they fit.
+- **Garment attributes.** The vision model also picks neckline, collar, sleeve, fit, length and closure from closed lists (`lib/analyses/attributes.ts` in the app), or null where one does not apply. Each value becomes a tag exactly as listed (`v-neck`, `button-down collar`), ahead of at most six free-form tags, twelve in all. Free-form tags leave out colours, pattern, material and attribute values. Done analyses older than `VISION_PROMPT_REVISION` count as stale for bulk queueing, so a prompt change can reach items already analysed.
 
 ## Pages (web)
 

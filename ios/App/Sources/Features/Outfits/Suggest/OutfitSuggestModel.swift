@@ -109,13 +109,14 @@ final class OutfitSuggestModel {
 		busy = true
 		defer { busy = false }
 		do {
-			let body = BulkItemsRequest(ownerId: ownerId)
 			if queue {
-				let result = try await api.queueBulkAnalyses(body)
+				let result = try await api.queueBulkAnalyses(BulkItemsRequest(ownerId: ownerId))
 				bulkMessage = "Queued suggestions for \(result.queued) items."
 			} else {
+				// Tags are added; pattern, material and seasons only fill empty fields.
+				let body = BulkApplyRequest(ownerId: ownerId, fields: BulkApplyField.allCases)
 				let result = try await api.applyBulkTags(body)
-				bulkMessage = "Applied tags to \(result.updated) items."
+				bulkMessage = "Applied suggestions to \(result.updated) items."
 			}
 		} catch { report(error) }
 	}
