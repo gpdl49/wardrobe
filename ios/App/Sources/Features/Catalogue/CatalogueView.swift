@@ -80,7 +80,11 @@ struct CatalogueView: View {
 				await model.updateScope(appModel.scope)
 			}
 		}
-		.sheet(isPresented: $showFiltersSheet) {
+		.sheet(isPresented: $showFiltersSheet, onDismiss: {
+			if let model {
+				Task { await model.reload() }
+			}
+		}) {
 			if let model {
 				CatalogueFilterSheet(model: model)
 			}
