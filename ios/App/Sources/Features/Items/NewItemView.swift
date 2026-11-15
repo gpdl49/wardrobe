@@ -14,6 +14,7 @@ struct NewItemView: View {
 	@Environment(\.dismiss) private var dismiss
 
 	@State private var model: NewItemModel
+	@State private var showingCrop = false
 	@State private var selectedPhotosPickerItem: PhotosPickerItem? = nil
 
 	init(locationId: ID? = nil, ownerId: ID? = nil, onCreated: @escaping (ID) -> Void = { _ in }) {
@@ -54,6 +55,10 @@ struct NewItemView: View {
 									.clipShape(RoundedRectangle(cornerRadius: 8))
 
 								Spacer()
+
+								Button { showingCrop = true } label: { Label("Crop", systemImage: "crop") }
+								.buttonStyle(.bordered)
+								.controlSize(.small)
 
 								Button(role: .destructive) {
 									model.capturedPhotoData = nil
@@ -122,6 +127,11 @@ struct NewItemView: View {
 			.sheet(isPresented: $model.showingCamera) {
 				CameraPickerView { data in
 					model.capturedPhotoData = data
+				}
+			}
+			.sheet(isPresented: $showingCrop) {
+				if let data = model.capturedPhotoData {
+					PhotoCropView(data: data) { model.capturedPhotoData = $0 }
 				}
 			}
 			.photosPicker(
