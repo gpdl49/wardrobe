@@ -57,7 +57,7 @@ struct MainTabs: View {
 			Tab("Catalogue", systemImage: "tshirt", value: AppTab.catalogue) { stack(.catalogue) { CatalogueView() } }
 			Tab("Locations", systemImage: "shippingbox", value: AppTab.locations) { stack(.locations) { LocationsView() } }
 			Tab("Pack", systemImage: "arrow.down.to.line", value: AppTab.pack) { stack(.pack) { PackView() } }
-			Tab("Unpack", systemImage: "arrow.up.from.line", value: AppTab.unpack) { stack(.unpack) { UnpackView() } }
+			Tab("Unpack", systemImage: "arrow.up.to.line", value: AppTab.unpack) { stack(.unpack) { UnpackView() } }
 			Tab("Sharing", systemImage: "person.2", value: AppTab.sharing) { stack(.sharing) { SharingView() } }
 			Tab("Settings", systemImage: "gearshape", value: AppTab.settings) { stack(.settings) { SettingsView() } }
 				.badge(uploads.failedCount)
