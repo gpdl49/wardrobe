@@ -80,7 +80,7 @@ public protocol WardrobeAPI: Sendable {
 	func createSuggestionRun(_ body: CreateSuggestionRunRequest, idempotencyKey: String) async throws -> SuggestionRunDTO
 	func dismissSuggestion(id: ID) async throws -> OutfitSuggestionDTO
 	func queueBulkAnalyses(_ body: BulkItemsRequest) async throws -> BulkAnalysesDTO
-	func applyBulkTags(_ body: BulkItemsRequest) async throws -> BulkApplyTagsDTO
+	func applyBulkTags(_ body: BulkApplyRequest) async throws -> BulkApplyTagsDTO
 	func immichThumbnail(assetId: ID) async throws -> Data?
 	func outfitImmichImage(outfitId: ID, linkId: ID, variant: PhotoVariant) async throws -> Data?
 }
@@ -116,7 +116,7 @@ public extension WardrobeAPI {
 	func createSuggestionRun(_ body: CreateSuggestionRunRequest, idempotencyKey: String) async throws -> SuggestionRunDTO { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
 	func dismissSuggestion(id: ID) async throws -> OutfitSuggestionDTO { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
 	func queueBulkAnalyses(_ body: BulkItemsRequest) async throws -> BulkAnalysesDTO { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
-	func applyBulkTags(_ body: BulkItemsRequest) async throws -> BulkApplyTagsDTO { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
+	func applyBulkTags(_ body: BulkApplyRequest) async throws -> BulkApplyTagsDTO { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
 	func immichThumbnail(assetId: ID) async throws -> Data? { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
 	func outfitImmichImage(outfitId: ID, linkId: ID, variant: PhotoVariant) async throws -> Data? { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
 }

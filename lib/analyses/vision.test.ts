@@ -15,7 +15,15 @@ const good = {
 	pattern: "Solid",
 	material: "100% merino wool",
 	seasons: ["autumn", "winter", "winter"],
-	tags: ["Crew Neck", "  knit ", "crew neck", ""],
+	attributes: {
+		neckline: "crew neck",
+		collar: null,
+		sleeve: "long sleeve",
+		fit: "regular fit",
+		length: null,
+		closure: "pullover",
+	},
+	tags: ["Chunky Knit", "  knit ", "chunky knit", "", "Crew Neck"],
 	labelText: "UNIQLO\nM\n100% MERINO WOOL",
 };
 
@@ -32,7 +40,15 @@ describe("parseVisionOutput", () => {
 			pattern: "solid",
 			material: "100% merino wool",
 			seasons: ["autumn", "winter"],
-			tags: ["crew neck", "knit"],
+			// Attribute tags first, then free tags, without repeats.
+			tags: [
+				"crew neck",
+				"long sleeve",
+				"regular fit",
+				"pullover",
+				"chunky knit",
+				"knit",
+			],
 			labelText: "UNIQLO\nM\n100% MERINO WOOL",
 		});
 	});
@@ -47,6 +63,14 @@ describe("parseVisionOutput", () => {
 				pattern: null,
 				material: null,
 				seasons: [],
+				attributes: {
+					neckline: null,
+					collar: null,
+					sleeve: null,
+					fit: null,
+					length: null,
+					closure: null,
+				},
 				tags: [],
 				labelText: null,
 			}),
@@ -57,6 +81,53 @@ describe("parseVisionOutput", () => {
 			suggestion: { name: "Blue jeans" },
 			raw: expect.anything(),
 		});
+	});
+
+	it("drops attribute values outside the lists instead of failing", () => {
+		const result = parseVisionOutput(
+			JSON.stringify({
+				...good,
+				attributes: { ...good.attributes, neckline: "sweetheart", fit: 3 },
+			}),
+			SLUGS,
+		);
+		expect(result.ok && result.suggestion.tags).toEqual([
+			"long sleeve",
+			"pullover",
+			"chunky knit",
+			"knit",
+			// From the free tags; the invalid neckline value itself is dropped.
+			"crew neck",
+		]);
+	});
+
+	it("still accepts output without attributes", () => {
+		const { attributes, ...rest } = good;
+		const result = parseVisionOutput(JSON.stringify(rest), SLUGS);
+		expect(result.ok && result.suggestion.tags).toEqual([
+			"chunky knit",
+			"knit",
+			"crew neck",
+		]);
+	});
+
+	it("caps free tags so they cannot crowd out attributes", () => {
+		const result = parseVisionOutput(
+			JSON.stringify({
+				...good,
+				tags: Array.from({ length: 20 }, (_, i) => `tag ${i}`),
+			}),
+			SLUGS,
+		);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.suggestion.tags).toHaveLength(10);
+		expect(result.suggestion.tags?.slice(0, 4)).toEqual([
+			"crew neck",
+			"long sleeve",
+			"regular fit",
+			"pullover",
+		]);
 	});
 
 	it("tolerates a Markdown fence around the JSON", () => {
@@ -108,6 +179,20 @@ describe("visionJsonSchema", () => {
 			Object.keys(schema.properties).sort(),
 		);
 		expect(schema.properties.categorySlug.enum).toEqual([...SLUGS, null]);
+		const attributes = schema.properties.attributes;
+		expect(attributes.additionalProperties).toBe(false);
+		expect([...attributes.required].sort()).toEqual(
+			Object.keys(attributes.properties).sort(),
+		);
+		expect(attributes.properties.sleeve).toMatchObject({
+			enum: [
+				"sleeveless",
+				"short sleeve",
+				"three-quarter sleeve",
+				"long sleeve",
+				null,
+			],
+		});
 		expect(schema.properties.seasons.items.enum).toEqual([
 			"spring",
 			"summer",

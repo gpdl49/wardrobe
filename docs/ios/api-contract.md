@@ -208,7 +208,7 @@ notes. Create outfit and suggestion-run calls require an idempotency key.
 | `POST /outfits/{id}/immich-assets`, `DELETE /outfits/{id}/immich-assets/{linkId}`, `GET /outfits/{id}/immich-assets/{linkId}/{variant}` | `linkImmichAssets`, `unlinkImmichAsset`, `outfitImmichImage` (bytes); `OutfitPhotoDTO` |
 | `GET/POST /suggestion-runs`, `GET /suggestion-runs/{id}` | `suggestionRuns`, `createSuggestionRun`, `suggestionRun`; `SuggestionRunDTO`, `SuggestionRequest` |
 | `POST /outfit-suggestions/{id}/dismiss` | `dismissSuggestion`; `OutfitSuggestionDTO` |
-| `POST /items/analyses`, `POST /items/analyses/apply-tags` | `queueBulkAnalyses`, `applyBulkTags`; `BulkItemsRequest`, `BulkAnalysesDTO`, `BulkApplyTagsDTO` |
+| `POST /items/analyses`, `POST /items/analyses/apply-tags` | `queueBulkAnalyses`, `applyBulkTags`; `BulkItemsRequest`, `BulkApplyRequest` (`fields: [BulkApplyField]?`), `BulkAnalysesDTO`, `BulkApplyTagsDTO` |
 
 Outfit photo uploads use `CreatePhotoRequest(outfitId:kind:contentType:size:)`
 and the upload queue's `.outfit(id)` target. Existing photo requests continue

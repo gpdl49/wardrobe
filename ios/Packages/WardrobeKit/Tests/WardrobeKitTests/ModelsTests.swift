@@ -29,6 +29,15 @@ import Testing
 		#expect(json == #"{"itemIds":["a"],"toLocationId":null}"#)
 	}
 
+	@Test func bulkApplyOmitsUnsetFieldsAndSendsChosenOnes() throws {
+		let encode = { (body: BulkApplyRequest) in String(decoding: try JSONEncoder.wardrobe.encode(body), as: UTF8.self) }
+		// No fields: the server applies tags only, as older clients expect.
+		#expect(try encode(BulkApplyRequest()) == "{}")
+		let json = try encode(BulkApplyRequest(ownerId: "u", fields: BulkApplyField.allCases))
+		#expect(json.contains(#""fields":["tags","pattern","material","seasons"]"#))
+		#expect(json.contains(#""ownerId":"u""#))
+	}
+
 	@Test func queryItemsSkipEmpty() {
 		let q = ItemQuery(owner: "u", season: .winter, q: "", limit: 20)
 		#expect(q.queryItems.map(\.name) == ["owner", "season", "limit"])

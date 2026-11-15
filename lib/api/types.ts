@@ -405,6 +405,12 @@ export interface BulkAnalysesDto {
 	queued: number;
 }
 
+/**
+ * What POST /api/items/analyses/apply-tags applies (default: tags only). Tags
+ * are added; the others are filled only where the item has none.
+ */
+export type BulkApplyField = "tags" | "pattern" | "material" | "seasons";
+
 /** POST /api/items/analyses/apply-tags */
 export interface BulkApplyTagsDto {
 	updated: number;

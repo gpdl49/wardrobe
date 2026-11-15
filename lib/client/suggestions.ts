@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
 	BulkAnalysesDto,
+	BulkApplyField,
 	BulkApplyTagsDto,
 	OutfitDetailDto,
 	OutfitSuggestionDto,
@@ -48,7 +49,7 @@ export const suggestionsApi = {
 		}),
 	queueTags: (body: BulkInput = {}) =>
 		api.request<BulkAnalysesDto>("POST", "/items/analyses", { body }),
-	applyTags: (body: BulkInput = {}) =>
+	applyTags: (body: BulkInput & { fields?: BulkApplyField[] } = {}) =>
 		api.request<BulkApplyTagsDto>("POST", "/items/analyses/apply-tags", {
 			body,
 		}),

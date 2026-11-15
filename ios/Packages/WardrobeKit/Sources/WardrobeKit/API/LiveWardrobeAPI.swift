@@ -313,7 +313,7 @@ public final class LiveWardrobeAPI: WardrobeAPI, Sendable {
 	public func queueBulkAnalyses(_ body: BulkItemsRequest) async throws -> BulkAnalysesDTO {
 		return try await request(method: "POST", path: "/api/items/analyses", bodyData: try JSONEncoder.wardrobe.encode(body))
 	}
-	public func applyBulkTags(_ body: BulkItemsRequest) async throws -> BulkApplyTagsDTO {
+	public func applyBulkTags(_ body: BulkApplyRequest) async throws -> BulkApplyTagsDTO {
 		return try await request(method: "POST", path: "/api/items/analyses/apply-tags", bodyData: try JSONEncoder.wardrobe.encode(body))
 	}
 
