@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { resetEnvCache } from "@/lib/env";
 import { suggestionRun } from "@/lib/jobs/definitions/suggestion-run";
 import { jobDefinitions } from "@/lib/jobs/registry";
+import { DEFAULT_TEXT_MODEL } from "@/lib/suggestions/prompt";
 import { runSuggestions } from "@/lib/suggestions/run";
 import { describeWithDb, resetDb } from "@/test/helpers/db";
 import { makeItem } from "@/test/helpers/fixtures";
@@ -183,7 +184,7 @@ describeWithDb("suggestion runs", () => {
 		});
 		const fetcher = vi.fn<typeof fetch>(async (_url, init) => {
 			const body = JSON.parse(init?.body as string);
-			expect(body.model).toBe("openai/gpt-5.6-luna");
+			expect(body.model).toBe(DEFAULT_TEXT_MODEL);
 			expect(body).not.toHaveProperty("temperature");
 			const data = JSON.parse(body.messages[1].content);
 			expect(data.items).toHaveLength(400);
