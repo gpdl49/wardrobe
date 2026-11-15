@@ -217,3 +217,83 @@ export async function applyAnalysis(
 	});
 	return toItemDetailDto(item, ctx);
 }
+
+/** Bulk operations deliberately skip items without edit access. */
+async function bulkItems(
+	viewer: Viewer,
+	input: import("@/lib/analyses/schema").BulkAnalysesInput,
+) {
+	const ctx = await loadAccess(viewer);
+	const items = await db().item.findMany({
+		where: {
+			ownerId: input.ownerId ?? viewer.id,
+			...(input.itemIds ? { id: { in: input.itemIds } } : {}),
+		},
+		orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+	});
+	return items.filter((item) => {
+		const access = accessToItem(ctx, item);
+		return access === "owner" || access === "edit";
+	});
+}
+export async function bulkQueueAnalyses(
+	viewer: Viewer,
+	input: import("@/lib/analyses/schema").BulkAnalysesInput,
+) {
+	if (!analysisEnabled())
+		throw conflict("Vision analysis is disabled (no OPENROUTER_API_KEY)");
+	const items = await bulkItems(viewer, input);
+	let queued = 0;
+	for (const item of items) {
+		if (queued >= 50) break;
+		const [photo, existing] = await Promise.all([
+			db().photo.findFirst({
+				where: {
+					itemId: item.id,
+					status: "ready",
+					kind: { in: ["main", "label"] },
+				},
+			}),
+			db().analysis.findFirst({
+				where: {
+					itemId: item.id,
+					kind: "vision",
+					status: { in: ["queued", "running", "done"] },
+				},
+			}),
+		]);
+		if (!photo || existing) continue;
+		const result = await queueVisionAnalysis(item.id, photo.id);
+		if (result.created && result.analysis.status === "queued") queued++;
+	}
+	return { queued };
+}
+export async function bulkApplyTags(
+	viewer: Viewer,
+	input: import("@/lib/analyses/schema").BulkAnalysesInput,
+) {
+	const items = await bulkItems(viewer, input);
+	let updated = 0;
+	for (const item of items) {
+		const analysis = await db().analysis.findFirst({
+			where: { itemId: item.id, kind: "vision", status: "done" },
+			orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+		});
+		if (!analysis) continue;
+		const parsed = itemSuggestionSchema.safeParse(analysis.result ?? {});
+		if (!parsed.success) continue;
+		await db().$transaction(async (tx) => {
+			const ids = await ensureTags(tx, item.ownerId, parsed.data.tags ?? []);
+			await tx.itemTag.createMany({
+				data: ids.map((tagId) => ({ itemId: item.id, tagId })),
+				skipDuplicates: true,
+			});
+			await tx.analysis.update({
+				where: { id: analysis.id },
+				data: { appliedAt: new Date() },
+			});
+		});
+		updated++;
+	}
+	return { updated };
+}

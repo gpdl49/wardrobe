@@ -140,10 +140,34 @@ export async function runVisionAnalysis(
 		);
 		const categories = await visionCategories();
 		const slugs = categories.map((c) => c.slug);
+		const item = await db().item.findUniqueOrThrow({
+			where: { id: analysis.itemId },
+			select: { ownerId: true },
+		});
+		const tags = await db().tag.findMany({
+			where: { ownerId: item.ownerId },
+			select: {
+				name: true,
+				_count: { select: { items: true, outfits: true } },
+			},
+		});
 		const response = await structuredCompletion({
 			apiKey,
 			model: analysis.model ?? OPENROUTER_VISION_MODEL,
-			messages: buildVisionMessages(categories, images),
+			messages: buildVisionMessages(
+				categories,
+				images,
+				tags
+					.sort(
+						(a, b) =>
+							b._count.items +
+								b._count.outfits -
+								(a._count.items + a._count.outfits) ||
+							a.name.localeCompare(b.name),
+					)
+					.slice(0, 50)
+					.map((tag) => tag.name),
+			),
 			schemaName: VISION_SCHEMA_NAME,
 			schema: visionJsonSchema(slugs),
 			fetch: deps.fetch,

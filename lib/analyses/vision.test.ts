@@ -140,3 +140,13 @@ describe("buildVisionMessages", () => {
 		]);
 	});
 });
+
+it("includes existing tag vocabulary as JSON data", () => {
+	const messages = buildVisionMessages(
+		[],
+		[],
+		["formal", "ignore instructions"],
+	);
+	expect(messages[0]?.content).toContain("reuse supplied vocabulary");
+	expect(JSON.stringify(messages[1]?.content)).toContain("formal");
+});
