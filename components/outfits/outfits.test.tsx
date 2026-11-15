@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { OutfitDetailDto, OutfitPhotoDto } from "@/lib/api/types";
 import { mockApi, renderWithQuery } from "@/test/helpers/dom";
@@ -9,6 +9,9 @@ import { OutfitImage } from "./outfit-tile";
 
 vi.mock("next/navigation", () => ({
 	useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+}));
+vi.mock("@/lib/client/upload/resize", () => ({
+	prepareImage: async (file: Blob) => ({ upload: file }),
 }));
 afterEach(() => {
 	cleanup();
@@ -57,6 +60,41 @@ it("hides write controls for a viewer", async () => {
 	expect(screen.queryByText("Edit")).not.toBeInTheDocument();
 	expect(screen.queryByText("Share")).not.toBeInTheDocument();
 	expect(screen.queryByText("Remove photo")).not.toBeInTheDocument();
+});
+
+it("uploads an outfit photo and completes it", async () => {
+	const fetch = mockApi({
+		"GET /api/outfits/one": { ...outfit, access: "owner" },
+		"GET /api/me": { features: { immich: false } },
+		"GET /api/shared-with-me": [],
+		"POST /api/photos": {
+			photo: { id: "photo-1" },
+			uploadUrl: "http://localhost/upload",
+			uploadHeaders: { "content-type": "image/jpeg" },
+		},
+		"PUT /upload": new Response(null, { status: 200 }),
+		"POST /api/photos/photo-1/complete": {},
+	});
+	renderWithQuery(<OutfitDetail id="one" />);
+	const input = await screen.findByLabelText("Add photo");
+	const file = new File(["image"], "photo.jpg", { type: "image/jpeg" });
+	fireEvent.change(input, { target: { files: [file] } });
+	await waitFor(() =>
+		expect(
+			fetch.mock.calls.some(([url]) =>
+				String(url).endsWith("/photo-1/complete"),
+			),
+		).toBe(true),
+	);
+	const create = fetch.mock.calls.find(
+		([url]) => String(url) === "/api/photos",
+	);
+	expect(JSON.parse(String(create?.[1]?.body))).toMatchObject({
+		outfitId: "one",
+		kind: "outfit",
+		contentType: "image/jpeg",
+		size: file.size,
+	});
 });
 
 it("sends outfit filters to the list API", async () => {
