@@ -6,6 +6,18 @@ import WardrobeKitTesting
 
 @MainActor
 @Suite struct NewItemModelTests {
+	@Test func loadDataEndsAnExpiredSession() async {
+		let api = FixtureWardrobeAPI()
+		let app = AppModel.preview(api: api)
+		let model = NewItemModel()
+		model.appModel = app
+		await api.setNextError(.signedOut)
+
+		await model.loadData(api: api)
+
+		#expect(app.auth.state == .signedOut)
+	}
+
 	@Test func createWithoutPhotoCallsAPI() async {
 		let api = FixtureWardrobeAPI()
 		let queue = UploadQueue(api: api, directory: URL.temporaryDirectory)

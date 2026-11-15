@@ -39,12 +39,13 @@ final class NewItemModel {
 		isLoadingData = true
 		defer { isLoadingData = false }
 
-		async let locs = try? api.locations(LocationQuery(owner: ownerId))
-		async let cats = try? api.categories()
-
-		let (l, c) = await (locs, cats)
-		self.locations = l ?? []
-		self.categories = c ?? []
+		do {
+			async let locs = api.locations(LocationQuery(owner: ownerId))
+			async let cats = api.categories()
+			(locations, categories) = try await (locs, cats)
+		} catch {
+			errorMessage = userFacingAPIError(error, appModel: appModel)
+		}
 	}
 
 	func create(api: any WardrobeAPI, uploads: UploadQueue) async -> ID? {
