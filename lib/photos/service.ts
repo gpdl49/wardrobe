@@ -1,6 +1,7 @@
 import {
 	type AccessContext,
 	accessToItem,
+	accessToOutfit,
 	accessToPhoto,
 	accessToWardrobe,
 	loadAccess,
@@ -18,6 +19,7 @@ import {
 } from "@/lib/http/errors";
 import { photoRenditions } from "@/lib/jobs/definitions/photo-renditions";
 import { enqueue } from "@/lib/jobs/queue";
+import { readableCoverThroughOutfit } from "@/lib/outfits/service";
 import { ensureCover } from "@/lib/photos/cover";
 import { toPhotoDto } from "@/lib/photos/present";
 import {
@@ -57,6 +59,7 @@ function parseId(id: string): string {
 
 const withItemAccess = {
 	item: { select: { ownerId: true, locationId: true } },
+	outfit: { select: { id: true, ownerId: true } },
 } as const;
 
 /** The photo and the caller's access to it; 404 without access. */
@@ -97,13 +100,32 @@ export async function createPhotoUpload(
 		);
 	}
 	const ctx = await loadAccess(viewer);
+	if (
+		(input.kind === "outfit") !== !!input.outfitId ||
+		(input.itemId && input.outfitId)
+	)
+		throw unprocessable(
+			"Outfit photos require an outfit and cannot have an item",
+		);
 	const item = input.itemId ? await findEditableItem(ctx, input.itemId) : null;
-	const ownerId = item?.ownerId ?? viewer.id;
-	const access = requireEdit(accessToPhoto(ctx, { ownerId, item }), "Photo");
+	const outfit = input.outfitId
+		? await db().outfit.findUnique({
+				where: { id: input.outfitId },
+				select: { id: true, ownerId: true },
+			})
+		: null;
+	if (input.outfitId && !outfit) throw notFound("Outfit not found");
+	if (outfit) requireEdit(accessToOutfit(ctx, outfit), "Outfit");
+	const ownerId = outfit?.ownerId ?? item?.ownerId ?? viewer.id;
+	const access = requireEdit(
+		accessToPhoto(ctx, { ownerId, item, outfit }),
+		"Photo",
+	);
 	const photo = await db().photo.create({
 		data: {
 			ownerId,
 			itemId: input.itemId ?? null,
+			outfitId: input.outfitId ?? null,
 			kind: input.kind,
 			contentType: input.contentType,
 			size: input.size,
@@ -201,7 +223,17 @@ export async function variantUrl(
 	if (!parsedVariant.success) {
 		throw notFound("Unknown photo variant");
 	}
-	const { photo } = await findPhoto(await loadAccess(viewer), id);
+	const ctx = await loadAccess(viewer);
+	const photo = await db().photo.findUnique({
+		where: { id: parseId(id) },
+		include: withItemAccess,
+	});
+	if (
+		!photo ||
+		(!accessToPhoto(ctx, photo) &&
+			!(await readableCoverThroughOutfit(ctx, photo.id)))
+	)
+		throw notFound("Photo not found");
 	const available =
 		parsedVariant.data === "original"
 			? photo.status !== "pending"
@@ -232,6 +264,8 @@ export async function updatePhoto(
 	const ctx = await loadAccess(viewer);
 	const { photo, access: current } = await findPhoto(ctx, id);
 	requireEdit(current, "Photo");
+	if (photo.outfitId || input.kind === "outfit")
+		throw unprocessable("Outfit photos cannot be reassigned or change kind");
 	const target = input.itemId
 		? await findEditableItem(ctx, input.itemId)
 		: null;
