@@ -15,6 +15,7 @@ import { MAX_ORIGINAL_BYTES, photoKey } from "@/lib/s3";
 import { describeWithDb, resetDb } from "@/test/helpers/db";
 import { makeItem, makeLocation } from "@/test/helpers/fixtures";
 import { apiRequest, json, routeParams, TEST_USER } from "@/test/helpers/http";
+import { makeOutfit, shareOutfit } from "@/test/helpers/outfits";
 import { type FakeS3, installFakeS3 } from "@/test/helpers/s3";
 import { OTHER_USER, share, THIRD_USER, userId } from "@/test/helpers/users";
 
@@ -568,5 +569,40 @@ describeWithDb("photos API", () => {
 			expect(byOwner.status).toBe(200);
 			expect(await json(byOwner)).toMatchObject({ ownerId, access: "owner" });
 		});
+	});
+	it("allows outfit uploads and only exposes an item cover through a shared outfit", async () => {
+		const outfit = await makeOutfit();
+		const item = await makeItem();
+		await db().outfitItem.create({
+			data: { outfitId: outfit.id, itemId: item.id, position: 0 },
+		});
+		await shareOutfit(outfit.id, await userId(OTHER_USER));
+		const cover = await makePhoto({ itemId: item.id, status: "ready" });
+		const other = await makePhoto({ itemId: item.id, status: "ready" });
+		await db().item.update({
+			where: { id: item.id },
+			data: { coverPhotoId: cover.id },
+		});
+		expect((await variant(cover.id, "thumb", OTHER_USER)).status).toBe(302);
+		expect((await variant(other.id, "thumb", OTHER_USER)).status).toBe(404);
+		expect(
+			(
+				await post({
+					outfitId: outfit.id,
+					kind: "main",
+					contentType: "image/jpeg",
+					size: 123,
+				})
+			).status,
+		).toBe(422);
+		const response = await post({
+			outfitId: outfit.id,
+			kind: "outfit",
+			contentType: "image/jpeg",
+			size: 123,
+		});
+		expect(response.status).toBe(201);
+		const uploaded = await json<PhotoUploadDto>(response);
+		expect((await patch(uploaded.photo.id, { kind: "main" })).status).toBe(422);
 	});
 });

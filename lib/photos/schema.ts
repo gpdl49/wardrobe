@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { MAX_ORIGINAL_BYTES, PHOTO_VARIANTS } from "@/lib/s3";
 
-export const PHOTO_KINDS = ["main", "label", "detail"] as const;
+export const PHOTO_KINDS = ["main", "label", "detail", "outfit"] as const;
 
 /** Content types the API accepts for an original (docs/wardrobe.md). */
 export const PHOTO_CONTENT_TYPES = [
@@ -25,6 +25,7 @@ const id = z.uuid();
 
 export const createPhotoSchema = z.strictObject({
 	itemId: id.nullish(),
+	outfitId: id.nullish(),
 	kind: z.enum(PHOTO_KINDS),
 	contentType: z
 		.string()
