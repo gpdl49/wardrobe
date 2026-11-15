@@ -72,6 +72,16 @@ public actor ImagePipeline {
 		return try await task.value
 	}
 
+    /// Loads an authenticated Immich picker thumbnail through Wardrobe.
+    public func immichThumbnail(assetId: ID) async throws -> Data? {
+        try await api.immichThumbnail(assetId: assetId)
+    }
+
+    /// Loads an authenticated linked Immich image through Wardrobe.
+    public func outfitImmichImage(outfitId: ID, linkId: ID, variant: PhotoVariant) async throws -> Data? {
+        try await api.outfitImmichImage(outfitId: outfitId, linkId: linkId, variant: variant)
+    }
+
 	/// Clears in-memory, disk, and in-flight caches.
 	public func clear() async {
 		memoryCache.removeAllObjects()

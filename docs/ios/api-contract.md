@@ -185,3 +185,31 @@ production value `2J2LYH5QBS.xyz.vidur.wardrobe`), parsed in `lib/env.ts`.
 Web-only (not in the app): `/admin/labels` (printable sheets) and
 `/admin/categories`. The location screen can still show and share a single
 QR label image.
+
+## Outfits, Immich and suggestions
+
+The additions in [the outfits contract](../outfits/contract.md) are also
+available through `WardrobeAPI`. `MeDTO.features` is optional for older
+servers. `PhotoDTO.outfitId` and `PhotoKind.outfit` identify outfit uploads.
+`OutfitPhotoDTO` represents either an upload or an Immich link; its URLs are
+Wardrobe paths. `ImagePipeline.immichThumbnail` and `outfitImmichImage` fetch
+those image bytes using the authenticated API, rather than following a
+presigned redirect. A missing image returns nil. Request and response types
+mirror the contract, including ordered item IDs and explicit null for cleared
+notes. Create outfit and suggestion-run calls require an idempotency key.
+
+| API | WardrobeKit |
+| --- | --- |
+| `GET /outfits`, `GET /outfits/shared-with-me` | `outfits`, `sharedOutfits`; `OutfitQuery`, `OutfitListDTO`, `OutfitSummaryDTO` |
+| `POST /outfits`, `GET/PATCH/DELETE /outfits/{id}` | `createOutfit`, `outfit`, `updateOutfit`, `deleteOutfit`; `CreateOutfitRequest`, `UpdateOutfitRequest`, `OutfitDetailDTO` |
+| `POST /outfits/{id}/shares`, `DELETE /outfits/{id}/shares/{shareId}` | `createOutfitShare`, `deleteOutfitShare`; `OutfitShareDTO` |
+| `GET/PUT/DELETE /immich`, `GET /immich/assets` | `immichStatus`, `connectImmich`, `disconnectImmich`, `immichAssets`; `ImmichStatusDTO`, `ImmichAssetListDTO` |
+| `GET /immich/assets/{id}/thumb` | `immichThumbnail` (bytes) |
+| `POST /outfits/{id}/immich-assets`, `DELETE /outfits/{id}/immich-assets/{linkId}`, `GET /outfits/{id}/immich-assets/{linkId}/{variant}` | `linkImmichAssets`, `unlinkImmichAsset`, `outfitImmichImage` (bytes); `OutfitPhotoDTO` |
+| `GET/POST /suggestion-runs`, `GET /suggestion-runs/{id}` | `suggestionRuns`, `createSuggestionRun`, `suggestionRun`; `SuggestionRunDTO`, `SuggestionRequest` |
+| `POST /outfit-suggestions/{id}/dismiss` | `dismissSuggestion`; `OutfitSuggestionDTO` |
+| `POST /items/analyses`, `POST /items/analyses/apply-tags` | `queueBulkAnalyses`, `applyBulkTags`; `BulkItemsRequest`, `BulkAnalysesDTO`, `BulkApplyTagsDTO` |
+
+Outfit photo uploads use `CreatePhotoRequest(outfitId:kind:contentType:size:)`
+and the upload queue's `.outfit(id)` target. Existing photo requests continue
+to use the item target and presigned URL flow.

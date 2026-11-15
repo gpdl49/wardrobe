@@ -67,7 +67,8 @@ public struct PhotoKind: OpenEnum {
 	public static let main: Self = "main"
 	public static let label: Self = "label"
 	public static let detail: Self = "detail"
-	public static let known: [Self] = [.main, .label, .detail]
+	public static let outfit: Self = "outfit"
+	public static let known: [Self] = [.main, .label, .detail, .outfit]
 }
 
 public struct PhotoStatus: OpenEnum {

@@ -7,6 +7,7 @@ import Observation
 public enum UploadTarget: Codable, Hashable, Sendable {
 	/// Add the photo to an existing item.
 	case item(ID)
+	case outfit(ID)
 	/// Create the item first (POST /items with the job's key), then attach.
 	case newItem(CreateItemRequest)
 }
@@ -615,6 +616,7 @@ public final class UploadQueue {
 			}
 			let photoRequest = CreatePhotoRequest(
 				itemId: job.itemId,
+                outfitId: { if case .outfit(let id) = job.target { return id }; return nil }(),
 				kind: job.kind,
 				contentType: "image/jpeg",
 				size: jpegData.count
