@@ -6,6 +6,14 @@ version, following [Semantic Versioning](https://semver.org/). After 1.0.0,
 [Conventional Commit](https://www.conventionalcommits.org/) titles of merged PRs; see
 [docs/releasing.md](docs/releasing.md#releases-maintainers).
 
+## [1.1.0](https://github.com/gpdl49/wardrobe/compare/v1.0.0...v1.1.0) (2026-11-15)
+
+
+### Added
+
+* **ios:** crop photos before upload ([9e75323](https://github.com/gpdl49/wardrobe/commit/9e75323ec755ed6ee3d23609c201b1f0f34dba47))
+* outfits, Immich photos and AI suggestions ([#11](https://github.com/gpdl49/wardrobe/issues/11)) ([a69af37](https://github.com/gpdl49/wardrobe/commit/a69af37c219e31f134f863d7d8b6905079c091e1))
+
 ## [1.0.0] - 2026-11-15
 
 ### Added
