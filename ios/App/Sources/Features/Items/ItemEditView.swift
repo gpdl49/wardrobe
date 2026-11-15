@@ -18,6 +18,8 @@ final class ItemEditModel {
 	var isSaving: Bool = false
 	var errorMessage: String? = nil
 
+	weak var appModel: AppModel?
+
 	init(item: ItemDetailDTO, api: any WardrobeAPI) {
 		self.item = item
 		self.api = api
@@ -55,7 +57,7 @@ final class ItemEditModel {
 			// Return refreshed item detail
 			return try await api.item(id: item.id)
 		} catch {
-			errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 			return nil
 		}
 	}
@@ -63,6 +65,7 @@ final class ItemEditModel {
 
 /// Sheet to edit an existing item.
 struct ItemEditView: View {
+	@Environment(AppModel.self) private var appModel
 	@Environment(\.dismiss) private var dismiss
 	@State private var model: ItemEditModel
 	var onSave: (ItemDetailDTO) -> Void
@@ -166,6 +169,7 @@ struct ItemEditView: View {
 				}
 			}
 			.task {
+				model.appModel = appModel
 				await model.loadAuxiliaryData()
 			}
 			.errorAlert($model.errorMessage)

@@ -24,6 +24,8 @@ final class NewItemModel {
 	var showingCamera: Bool = false
 	var showingPhotosPicker: Bool = false
 
+	weak var appModel: AppModel?
+
 	init(locationId: ID? = nil, ownerId: ID? = nil) {
 		self.locationId = locationId
 		self.ownerId = ownerId
@@ -75,7 +77,7 @@ final class NewItemModel {
 				return summary.id
 			}
 		} catch {
-			errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 			return nil
 		}
 	}

@@ -25,6 +25,7 @@ struct ItemDetailView: View {
 		.task {
 			if viewModel == nil {
 				let vm = ItemDetailModel(itemId: itemId, api: appModel.api)
+				vm.appModel = appModel
 				viewModel = vm
 				await vm.load()
 			}

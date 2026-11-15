@@ -139,6 +139,7 @@ struct NewItemView: View {
 				}
 			}
 			.task {
+				model.appModel = appModel
 				await model.loadData(api: appModel.api)
 			}
 			.errorAlert($model.errorMessage)

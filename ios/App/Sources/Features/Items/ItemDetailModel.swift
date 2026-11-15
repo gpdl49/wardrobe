@@ -38,6 +38,9 @@ final class ItemDetailModel {
 	private(set) var pollTask: Task<Void, Never>? = nil
 	var isPolling: Bool { pollTask != nil }
 
+	/// Set from the view so `signed_out` ends the session instead of showing a generic alert.
+	weak var appModel: AppModel?
+
 	init(itemId: ID, api: any WardrobeAPI) {
 		self.itemId = itemId
 		self.api = api
@@ -77,7 +80,7 @@ final class ItemDetailModel {
 
 			startPollingIfNeeded()
 		} catch {
-			errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 		}
 	}
 
@@ -133,7 +136,7 @@ final class ItemDetailModel {
 			_ = try await api.updateItem(id: itemId, patch)
 			await refresh()
 		} catch {
-			errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 		}
 	}
 
@@ -142,7 +145,7 @@ final class ItemDetailModel {
 			_ = try await api.updatePhoto(id: photoId, UpdatePhotoRequest(kind: kind))
 			await refresh()
 		} catch {
-			errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 		}
 	}
 
@@ -151,7 +154,7 @@ final class ItemDetailModel {
 			try await api.deletePhoto(id: photoId)
 			await refresh()
 		} catch {
-			errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 		}
 	}
 
@@ -173,7 +176,7 @@ final class ItemDetailModel {
 				startPollingIfNeeded()
 			}
 		} catch {
-			errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 		}
 	}
 
@@ -213,7 +216,7 @@ final class ItemDetailModel {
 		do {
 			self.item = try await api.applyAnalysis(itemId: itemId, analysisId: analysisId, fields: fields)
 		} catch {
-			errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 		}
 	}
 
@@ -227,7 +230,7 @@ final class ItemDetailModel {
 			isDeleted = true
 			return true
 		} catch {
-			deleteError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+			deleteError = userFacingAPIError(error, appModel: appModel)
 			return false
 		}
 	}
