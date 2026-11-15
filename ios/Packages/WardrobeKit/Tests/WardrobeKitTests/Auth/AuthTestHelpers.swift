@@ -142,35 +142,41 @@ final class AuthURLProtocolStub: URLProtocol, @unchecked Sendable {
 		request
 	}
 
+	private struct DeliveryContext: @unchecked Sendable {
+		let protocolInstance: AuthURLProtocolStub
+	}
+
 	override func startLoading() {
+		let context = DeliveryContext(protocolInstance: self)
 		let host = request.url?.host ?? ""
 		let (handler, delay) = Storage.shared.recordRequest(forHost: host)
 
-		Task {
+		Task { @Sendable [context, handler, delay] in
+			let stub = context.protocolInstance
 			if delay > 0 {
 				try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
 			}
 
 			guard let handler else {
 				let notFound = HTTPURLResponse(
-					url: request.url ?? URL(string: "https://example.com")!,
+					url: stub.request.url ?? URL(string: "https://example.com")!,
 					statusCode: 404,
 					httpVersion: nil,
 					headerFields: nil
 				)!
-				client?.urlProtocol(self, didReceive: notFound, cacheStoragePolicy: .notAllowed)
-				client?.urlProtocol(self, didLoad: Data())
-				client?.urlProtocolDidFinishLoading(self)
+				stub.client?.urlProtocol(stub, didReceive: notFound, cacheStoragePolicy: .notAllowed)
+				stub.client?.urlProtocol(stub, didLoad: Data())
+				stub.client?.urlProtocolDidFinishLoading(stub)
 				return
 			}
 
 			do {
-				let (response, data) = try handler(request)
-				client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-				client?.urlProtocol(self, didLoad: data)
-				client?.urlProtocolDidFinishLoading(self)
+				let (response, data) = try handler(stub.request)
+				stub.client?.urlProtocol(stub, didReceive: response, cacheStoragePolicy: .notAllowed)
+				stub.client?.urlProtocol(stub, didLoad: data)
+				stub.client?.urlProtocolDidFinishLoading(stub)
 			} catch {
-				client?.urlProtocol(self, didFailWithError: error)
+				stub.client?.urlProtocol(stub, didFailWithError: error)
 			}
 		}
 	}
