@@ -31,6 +31,7 @@ describeWithDb("GET /api/me signed in", () => {
 			...TEST_USER,
 			id: row.id,
 			isAdmin: false,
+			features: { vision: false, suggestions: false, immich: false },
 		});
 	});
 

@@ -23,6 +23,8 @@ export type StructuredRequest = {
 	schema: object;
 	/** Caps spend per call; the output is a small JSON object. */
 	maxTokens?: number;
+	/** Omit for models which do not support the temperature parameter. */
+	omitTemperature?: boolean;
 	timeoutMs?: number;
 	fetch?: typeof fetch;
 };
@@ -81,7 +83,7 @@ export async function structuredCompletion(
 			},
 			// Only route to providers that honour response_format.
 			provider: { require_parameters: true },
-			temperature: 0,
+			...(request.omitTemperature ? {} : { temperature: 0 }),
 			max_tokens: request.maxTokens ?? 1000,
 		}),
 		signal: AbortSignal.timeout(request.timeoutMs ?? 60_000),

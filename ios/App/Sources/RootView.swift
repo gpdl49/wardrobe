@@ -58,6 +58,7 @@ struct MainTabs: View {
 			Tab("Locations", systemImage: "shippingbox", value: AppTab.locations) { stack(.locations) { LocationsView() } }
 			Tab("Pack", systemImage: "arrow.down.to.line", value: AppTab.pack) { stack(.pack) { PackView() } }
 			Tab("Unpack", systemImage: "arrow.up.to.line", value: AppTab.unpack) { stack(.unpack) { UnpackView() } }
+			Tab("Outfits", systemImage: "square.stack.3d.up", value: AppTab.outfits) { stack(.outfits) { OutfitsView() } }
 			Tab("Sharing", systemImage: "person.2", value: AppTab.sharing) { stack(.sharing) { SharingView() } }
 			Tab("Settings", systemImage: "gearshape", value: AppTab.settings) { stack(.settings) { SettingsView() } }
 				.badge(uploads.failedCount)
@@ -81,6 +82,8 @@ extension View {
 			case .location(let id): LocationDetailView(locationId: id)
 			case .label(let ownerId, let code): LocationCodeResolverView(ownerId: ownerId, code: code)
 			case .session(let id): SessionSummaryView(sessionId: id)
+			case .outfit(let id): OutfitDetailView(outfitId: id)
+			case .suggest: OutfitSuggestView()
 			}
 		}
 	}

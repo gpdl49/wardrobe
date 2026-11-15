@@ -18,6 +18,13 @@ public actor FixtureWardrobeAPI: WardrobeAPI {
 	public var photos: [PhotoDTO] = []
 	public var analysesList: [AnalysisDTO] = []
 	public var movements: [MovementDTO] = []
+ private var outfitRecords: [OutfitDetailDTO] = []
+ private var outfitKeys: [String: ID] = [:]
+ private var runRecords: [SuggestionRunDTO] = []
+ private var runKeys: [String: ID] = [:]
+ private var connection = ImmichStatusDTO(enabled: true, connected: true, url: "https://immich.example.com", user: ImmichUserDTO(id: "immich-user", email: "me@example.com", name: "Me"))
+ private var library: [ImmichAssetDTO] = [ImmichAssetDTO(id: "40000000-0000-4000-8000-000000000001", fileName: "outfit.jpg", width: 1200, height: 1600, thumbhash: nil, takenAt: nil, thumbUrl: "/api/immich/assets/40000000-0000-4000-8000-000000000001/thumb")]
+
 
 	public func seedPhoto(_ photo: PhotoDTO) {
 		photos.append(photo)
@@ -48,6 +55,13 @@ public actor FixtureWardrobeAPI: WardrobeAPI {
 			ItemSummaryDTO(id: "30000000-0000-4000-8000-000000000002", ownerId: Self.meID, access: .owner, name: "White shirt", brand: "COS", size: "M", colors: [ItemColor(name: "white", hex: "#f5f5f5", share: 0.95)], seasons: [.spring, .summer], status: .active, location: closet.ref, createdAt: now, updatedAt: now),
 			ItemSummaryDTO(id: "30000000-0000-4000-8000-000000000003", ownerId: Self.meID, access: .owner, name: "Grey hoodie", status: .active, location: closet.ref, createdAt: now, updatedAt: now),
 		]
+        let owner = UserRef(id: Self.meID, email: me.email, username: me.username)
+        let selected = Array(items.prefix(2))
+        outfitRecords = [OutfitDetailDTO(id: "50000000-0000-4000-8000-000000000001", ownerId: Self.meID, access: .owner, name: "Everyday layers", notes: nil, seasons: [.autumn], tags: ["wool"], itemCount: selected.count, previewItems: selected.map { OutfitItemRef(id: $0.id, name: $0.name, coverPhoto: $0.coverPhoto) }, cover: nil, createdAt: now, updatedAt: now, owner: owner, items: selected, photos: [], shares: [])]
+        let runID = "60000000-0000-4000-8000-000000000001"
+        let suggestion = OutfitSuggestionDTO(id: "70000000-0000-4000-8000-000000000001", runId: runID, name: "Casual layers", rationale: "Comfortable layers", items: selected, feedback: nil, outfitId: nil, createdAt: now)
+        runRecords = [SuggestionRunDTO(id: runID, ownerId: Self.meID, status: .done, request: SuggestionRequest(), model: "fixture", error: nil, createdAt: now, updatedAt: now, suggestions: [suggestion])]
+        me.features = FeaturesDTO(vision: true, suggestions: true, immich: true)
 	}
 
 	public func setNextError(_ e: APIError?) { nextError = e }
@@ -300,14 +314,21 @@ public actor FixtureWardrobeAPI: WardrobeAPI {
 	public func createPhoto(_ body: CreatePhotoRequest, idempotencyKey: String) async throws -> PhotoUploadDTO {
 		try record("POST /photos")
 		let id = UUID().uuidString.lowercased()
-		let photo = PhotoDTO(id: id, ownerId: me.id, access: .owner, itemId: body.itemId, kind: body.kind, status: .pending, contentType: body.contentType, size: body.size, createdAt: now)
+		let photo = PhotoDTO(id: id, ownerId: me.id, access: .owner, itemId: body.itemId, outfitId: body.outfitId, kind: body.kind, status: .pending, contentType: body.contentType, size: body.size, createdAt: now)
 		photos.append(photo)
 		return PhotoUploadDTO(photo: photo, uploadUrl: URL(string: "https://s3.example.com/photos/\(id)/original")!, uploadHeaders: ["Content-Type": body.contentType])
 	}
 	public func uploadPhoto(_ data: Data, to url: URL, headers: [String: String]) async throws { try record("PUT \(url.path)") }
 	public func completePhoto(id: ID) async throws -> PhotoDTO {
 		try record("POST /photos/\(id)/complete")
-		return PhotoDTO(id: id, ownerId: me.id, access: .owner, itemId: nil, kind: .main, status: .processing, contentType: "image/jpeg", size: 1, createdAt: now)
+		guard let index = photos.firstIndex(where: { $0.id == id }) else { throw APIError(status: 404, error: "not_found", message: "Photo not found") }
+        photos[index].status = .processing
+        let photo = photos[index]
+        if let outfitId = photo.outfitId, let outfitIndex = outfitRecords.firstIndex(where: { $0.id == outfitId }), !outfitRecords[outfitIndex].photos.contains(where: { $0.id == id }) {
+            let path = "/api/photos/\(id)"
+            outfitRecords[outfitIndex].photos.append(OutfitPhotoDTO(id: id, source: .upload, status: .processing, width: nil, height: nil, blurhash: nil, thumbhash: nil, assetId: nil, takenAt: nil, createdAt: now, urls: ["thumb": "\(path)/thumb", "display": "\(path)/display"]))
+        }
+        return photo
 	}
 	public func updatePhoto(id: ID, _ body: UpdatePhotoRequest) async throws -> PhotoDTO {
 		try record("PATCH /photos/\(id)")
@@ -325,6 +346,7 @@ public actor FixtureWardrobeAPI: WardrobeAPI {
 	public func deletePhoto(id: ID) async throws {
 		try record("DELETE /photos/\(id)")
 		photos.removeAll { $0.id == id }
+        for i in outfitRecords.indices { outfitRecords[i].photos.removeAll { $0.id == id } }
 	}
 	public func photoURL(id: ID, variant: PhotoVariant) async throws -> URL? { try record("GET /photos/\(id)/\(variant)"); return nil }
 
@@ -400,4 +422,223 @@ public actor FixtureWardrobeAPI: WardrobeAPI {
 		sharesList.removeAll { $0.id == id }
 	}
 	public func sharedWithMe() async throws -> [SharedWithMeDTO] { try record("GET /shared-with-me"); return sharedWithMeList }
+}
+
+// MARK: - Outfits, Immich and suggestions
+extension FixtureWardrobeAPI {
+	public func outfits(_ query: OutfitQuery) async throws -> OutfitListDTO {
+		try record("GET /outfits")
+		let filtered = outfitRecords.filter {
+			(query.owner == nil || $0.ownerId == query.owner)
+				&& (query.q == nil || $0.name.localizedCaseInsensitiveContains(query.q!))
+				&& (query.item == nil || $0.items.contains { $0.id == query.item })
+				&& (query.tag == nil || $0.tags.contains(query.tag!))
+				&& (query.season == nil || $0.seasons.contains(query.season!))
+		}
+		return OutfitListDTO(outfits: filtered.map(summary), nextCursor: nil)
+	}
+	private func summary(_ o: OutfitDetailDTO) -> OutfitSummaryDTO {
+		OutfitSummaryDTO(
+			id: o.id, ownerId: o.ownerId, access: o.access, name: o.name, notes: o.notes,
+			seasons: o.seasons, tags: o.tags, itemCount: o.items.count, previewItems: o.previewItems,
+			cover: o.photos.first, createdAt: o.createdAt, updatedAt: o.updatedAt)
+	}
+	public func sharedOutfits() async throws -> [OutfitSummaryDTO] {
+		try record("GET /outfits/shared-with-me")
+		return []
+	}
+	public func outfit(id: ID) async throws -> OutfitDetailDTO {
+		try record("GET /outfits/\(id)")
+		guard let o = outfitRecords.first(where: { $0.id == id }) else {
+			throw APIError(status: 404, error: "not_found", message: "Outfit not found")
+		}
+		return o
+	}
+	public func createOutfit(_ body: CreateOutfitRequest, idempotencyKey: String) async throws -> OutfitDetailDTO {
+		try record("POST /outfits")
+		if let id = outfitKeys[idempotencyKey], let existing = outfitRecords.first(where: { $0.id == id }) {
+			return existing
+		}
+		let selected = (body.itemIds ?? []).compactMap { id in items.first { $0.id == id } }
+		let o = OutfitDetailDTO(
+			id: UUID().uuidString, ownerId: body.ownerId ?? me.id, access: .owner, name: body.name,
+			notes: body.notes, seasons: body.seasons ?? [], tags: body.tags ?? [],
+			itemCount: selected.count,
+			previewItems: selected.map {
+				OutfitItemRef(id: $0.id, name: $0.name, coverPhoto: $0.coverPhoto)
+			}, cover: nil, createdAt: now, updatedAt: now,
+			owner: UserRef(id: me.id, email: me.email, username: me.username), items: selected, photos: [],
+			shares: [])
+		outfitRecords.insert(o, at: 0)
+		outfitKeys[idempotencyKey] = o.id
+		if let id = body.suggestionId {
+			for i in runRecords.indices {
+				if let j = runRecords[i].suggestions.firstIndex(where: { $0.id == id }) {
+					runRecords[i].suggestions[j].feedback = .saved
+					runRecords[i].suggestions[j].outfitId = o.id
+				}
+			}
+		}
+		return o
+	}
+	public func updateOutfit(id: ID, _ body: UpdateOutfitRequest) async throws -> OutfitDetailDTO {
+		try record("PATCH /outfits/\(id)")
+		guard let i = outfitRecords.firstIndex(where: { $0.id == id }) else {
+			throw APIError(status: 404, error: "not_found", message: "Outfit not found")
+		}
+		if let name = body.name { outfitRecords[i].name = name }
+		switch body.notes {
+		case .unset: break
+		case .null: outfitRecords[i].notes = nil
+		case .value(let notes): outfitRecords[i].notes = notes
+		}
+		if let seasons = body.seasons { outfitRecords[i].seasons = seasons }
+		if let tags = body.tags { outfitRecords[i].tags = tags }
+		if let ids = body.itemIds {
+			let selected = ids.compactMap { id in items.first { $0.id == id } }
+			outfitRecords[i].items = selected
+			outfitRecords[i].readableItemIds = selected.map(\.id)
+			outfitRecords[i].itemCount = selected.count
+			outfitRecords[i].previewItems = selected.map {
+				OutfitItemRef(id: $0.id, name: $0.name, coverPhoto: $0.coverPhoto)
+			}
+		}
+		return outfitRecords[i]
+	}
+	public func deleteOutfit(id: ID) async throws {
+		try record("DELETE /outfits/\(id)")
+		outfitRecords.removeAll { $0.id == id }
+	}
+	public func createOutfitShare(outfitId: ID, _ body: CreateOutfitShareRequest) async throws -> OutfitShareDTO {
+		try record("POST /outfits/\(outfitId)/shares")
+		guard let i = outfitRecords.firstIndex(where: { $0.id == outfitId }) else {
+			throw APIError(status: 404, error: "not_found", message: "Outfit not found")
+		}
+		let share = OutfitShareDTO(
+			id: UUID().uuidString, grantee: UserRef(id: Self.friendID, email: body.grantee, username: nil),
+			createdAt: now)
+		outfitRecords[i].shares.append(share)
+		return share
+	}
+	public func deleteOutfitShare(outfitId: ID, shareId: ID) async throws {
+		try record("DELETE /outfits/\(outfitId)/shares/\(shareId)")
+		if let i = outfitRecords.firstIndex(where: { $0.id == outfitId }) {
+			outfitRecords[i].shares.removeAll { $0.id == shareId }
+		}
+	}
+	public func immichStatus() async throws -> ImmichStatusDTO {
+		try record("GET /immich")
+		return connection
+	}
+	public func connectImmich(_ body: ConnectImmichRequest) async throws -> ImmichStatusDTO {
+		try record("PUT /immich")
+		connection.connected = true
+		connection.user = ImmichUserDTO(id: "immich-user", email: "me@example.com", name: "Me")
+		return connection
+	}
+	public func disconnectImmich() async throws {
+		try record("DELETE /immich")
+		connection.connected = false
+		connection.user = nil
+	}
+	public func immichAssets(_ query: ImmichAssetQuery) async throws -> ImmichAssetListDTO {
+		try record("GET /immich/assets")
+		return ImmichAssetListDTO(
+			assets: library.filter {
+				query.q == nil || ($0.fileName?.localizedCaseInsensitiveContains(query.q!) ?? false)
+			}, nextCursor: nil)
+	}
+	public func immichThumbnail(assetId: ID) async throws -> Data? {
+		try record("GET /immich/assets/\(assetId)/thumb")
+		return library.contains(where: { $0.id == assetId }) ? fixtureImage : nil
+	}
+	private var fixtureImage: Data {
+		Data(
+			base64Encoded:
+				"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/aAAAAABJRU5ErkJggg=="
+		)!
+	}
+	public func outfitImmichImage(outfitId: ID, linkId: ID, variant: PhotoVariant) async throws -> Data? {
+		try record("GET /outfits/\(outfitId)/immich-assets/\(linkId)/\(variant.rawValue)")
+		guard connection.connected, let outfit = outfitRecords.first(where: { $0.id == outfitId }),
+			outfit.photos.contains(where: { $0.id == linkId && $0.source == .immich })
+		else { return nil }
+		return fixtureImage
+	}
+	public func linkImmichAssets(outfitId: ID, _ body: LinkImmichAssetsRequest) async throws -> [OutfitPhotoDTO] {
+		try record("POST /outfits/\(outfitId)/immich-assets")
+		guard let i = outfitRecords.firstIndex(where: { $0.id == outfitId }) else {
+			throw APIError(status: 404, error: "not_found", message: "Outfit not found")
+		}
+		return body.assetIds.compactMap { id in
+			if let existing = outfitRecords[i].photos.first(where: { $0.assetId == id }) { return existing }
+			guard let a = library.first(where: { $0.id == id }) else { return nil }
+			let link = UUID().uuidString
+			let photo = OutfitPhotoDTO(
+				id: link, source: .immich, status: .ready, width: a.width, height: a.height,
+				blurhash: nil, thumbhash: a.thumbhash, assetId: id, takenAt: a.takenAt, createdAt: now,
+				urls: [
+					"thumb": "/api/outfits/\(outfitId)/immich-assets/\(link)/thumb",
+					"display": "/api/outfits/\(outfitId)/immich-assets/\(link)/display",
+				])
+			outfitRecords[i].photos.append(photo)
+			return photo
+		}
+	}
+	public func unlinkImmichAsset(outfitId: ID, linkId: ID) async throws {
+		try record("DELETE /outfits/\(outfitId)/immich-assets/\(linkId)")
+		if let i = outfitRecords.firstIndex(where: { $0.id == outfitId }) {
+			outfitRecords[i].photos.removeAll { $0.id == linkId }
+		}
+	}
+	public func suggestionRuns(owner: ID?) async throws -> [SuggestionRunDTO] {
+		try record("GET /suggestion-runs")
+		return runRecords.filter { owner == nil || $0.ownerId == owner }
+	}
+	public func suggestionRun(id: ID) async throws -> SuggestionRunDTO {
+		try record("GET /suggestion-runs/\(id)")
+		guard let run = runRecords.first(where: { $0.id == id }) else {
+			throw APIError(status: 404, error: "not_found", message: "Run not found")
+		}
+		return run
+	}
+	public func createSuggestionRun(_ body: CreateSuggestionRunRequest, idempotencyKey: String) async throws
+		-> SuggestionRunDTO
+	{
+		try record("POST /suggestion-runs")
+		if let id = runKeys[idempotencyKey], let run = runRecords.first(where: { $0.id == id }) { return run }
+		let id = UUID().uuidString
+		let proposal = OutfitSuggestionDTO(
+			id: UUID().uuidString, runId: id, name: "Everyday", rationale: "A simple combination",
+			items: Array(items.prefix(2)), feedback: nil, outfitId: nil, createdAt: now)
+		let run = SuggestionRunDTO(
+			id: id, ownerId: body.ownerId ?? me.id, status: .done,
+			request: SuggestionRequest(
+				prompt: body.prompt, season: body.season, itemIds: body.itemIds, count: body.count),
+			model: "fixture", error: nil, createdAt: now, updatedAt: now, suggestions: [proposal])
+		runRecords.insert(run, at: 0)
+		runKeys[idempotencyKey] = id
+		return run
+	}
+	public func dismissSuggestion(id: ID) async throws -> OutfitSuggestionDTO {
+		try record("POST /outfit-suggestions/\(id)/dismiss")
+		for i in runRecords.indices {
+			if let j = runRecords[i].suggestions.firstIndex(where: { $0.id == id }) {
+				if runRecords[i].suggestions[j].feedback == .saved {
+					throw APIError(status: 409, error: "conflict", message: "Already saved")
+				}
+				runRecords[i].suggestions[j].feedback = .dismissed
+				return runRecords[i].suggestions[j]
+			}
+		}
+		throw APIError(status: 404, error: "not_found", message: "Suggestion not found")
+	}
+	public func queueBulkAnalyses(_ body: BulkItemsRequest) async throws -> BulkAnalysesDTO {
+		try record("POST /items/analyses")
+		return BulkAnalysesDTO(queued: 0)
+	}
+	public func applyBulkTags(_ body: BulkItemsRequest) async throws -> BulkApplyTagsDTO {
+		try record("POST /items/analyses/apply-tags")
+		return BulkApplyTagsDTO(updated: 0)
+	}
 }

@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
 	accessToItem,
 	accessToLocation,
+	accessToOutfit,
 	accessToPhoto,
 	accessToWardrobe,
 	buildAccessContext,
 	canRestructureLocation,
 	readableItems,
 	readableLocations,
+	readableOutfits,
 	requireEdit,
 	requireRead,
 } from "@/lib/access";
@@ -178,5 +180,82 @@ describe("readableItems and readableLocations", () => {
 	it("matches nothing without access", () => {
 		expect(readableItems(ctx, "eve")).toEqual({ id: { in: [] } });
 		expect(readableLocations(ctx, "eve")).toEqual({ id: { in: [] } });
+	});
+});
+
+/** As `ctx`, plus Anna's "wedding" outfit shared directly. */
+const withOutfit = buildAccessContext(
+	ME,
+	[
+		{ ownerId: ANNA, access: "edit", locationId: "closet" },
+		{ ownerId: BEN, access: "view", locationId: null },
+	],
+	[{ id: "closet", ownerId: ANNA, access: "edit" }],
+	["wedding"],
+);
+
+describe("accessToOutfit", () => {
+	it("follows ownership and whole-wardrobe shares", () => {
+		expect(accessToOutfit(withOutfit, { id: "mine", ownerId: ME })).toBe(
+			"owner",
+		);
+		expect(accessToOutfit(withOutfit, { id: "his", ownerId: BEN })).toBe(
+			"view",
+		);
+	});
+
+	it("gives view on an outfit shared directly, and nothing on the rest", () => {
+		expect(accessToOutfit(withOutfit, { id: "wedding", ownerId: ANNA })).toBe(
+			"view",
+		);
+		// The edit share on Anna's closet does not reach her outfits.
+		expect(
+			accessToOutfit(withOutfit, { id: "office", ownerId: ANNA }),
+		).toBeNull();
+		expect(accessToOutfit(none, { id: "wedding", ownerId: ANNA })).toBeNull();
+	});
+
+	it("keeps the stronger of a wardrobe share and an outfit share", () => {
+		const both = buildAccessContext(
+			ME,
+			[{ ownerId: ANNA, access: "edit", locationId: null }],
+			[],
+			["wedding"],
+		);
+		expect(accessToOutfit(both, { id: "wedding", ownerId: ANNA })).toBe("edit");
+	});
+});
+
+describe("accessToPhoto for outfit photos", () => {
+	it("follows the outfit, not the wardrobe", () => {
+		expect(
+			accessToPhoto(withOutfit, {
+				ownerId: ANNA,
+				item: null,
+				outfit: { id: "wedding", ownerId: ANNA },
+			}),
+		).toBe("view");
+		expect(
+			accessToPhoto(withOutfit, {
+				ownerId: ANNA,
+				item: null,
+				outfit: { id: "office", ownerId: ANNA },
+			}),
+		).toBeNull();
+	});
+});
+
+describe("readableOutfits", () => {
+	it("is the whole wardrobe with wardrobe access", () => {
+		expect(readableOutfits(withOutfit)).toEqual({ ownerId: ME });
+		expect(readableOutfits(withOutfit, BEN)).toEqual({ ownerId: BEN });
+	});
+
+	it("is only the shared outfits otherwise", () => {
+		expect(readableOutfits(withOutfit, ANNA)).toEqual({
+			ownerId: ANNA,
+			id: { in: ["wedding"] },
+		});
+		expect(readableOutfits(none, ANNA)).toEqual({ id: { in: [] } });
 	});
 });

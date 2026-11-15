@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 
-const kindRank = { main: 0, detail: 1, label: 2 } as const;
+// `outfit` photos never belong to an item; ranked last for completeness.
+const kindRank = { main: 0, detail: 1, label: 2, outfit: 3 } as const;
 
 /**
  * Gives an item without a cover photo one: its best ready photo (kind `main`

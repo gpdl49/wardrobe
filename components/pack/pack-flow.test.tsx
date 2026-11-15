@@ -52,6 +52,7 @@ const ME: MeDto = {
 	username: "a",
 	groups: ["wardrobe"],
 	isAdmin: false,
+	features: { vision: false, suggestions: false, immich: false },
 };
 
 let backend: ReturnType<typeof fakeBackend>;

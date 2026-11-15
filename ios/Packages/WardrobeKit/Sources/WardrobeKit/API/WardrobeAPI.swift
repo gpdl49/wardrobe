@@ -60,6 +60,29 @@ public protocol WardrobeAPI: Sendable {
 	func updateShare(id: ID, access: ShareAccess) async throws -> ShareDTO
 	func deleteShare(id: ID) async throws
 	func sharedWithMe() async throws -> [SharedWithMeDTO]
+	// Outfits, Immich and suggestions
+	func outfits(_ query: OutfitQuery) async throws -> OutfitListDTO
+	func sharedOutfits() async throws -> [OutfitSummaryDTO]
+	func outfit(id: ID) async throws -> OutfitDetailDTO
+	func createOutfit(_ body: CreateOutfitRequest, idempotencyKey: String) async throws -> OutfitDetailDTO
+	func updateOutfit(id: ID, _ body: UpdateOutfitRequest) async throws -> OutfitDetailDTO
+	func deleteOutfit(id: ID) async throws
+	func createOutfitShare(outfitId: ID, _ body: CreateOutfitShareRequest) async throws -> OutfitShareDTO
+	func deleteOutfitShare(outfitId: ID, shareId: ID) async throws
+	func immichStatus() async throws -> ImmichStatusDTO
+	func connectImmich(_ body: ConnectImmichRequest) async throws -> ImmichStatusDTO
+	func disconnectImmich() async throws
+	func immichAssets(_ query: ImmichAssetQuery) async throws -> ImmichAssetListDTO
+	func linkImmichAssets(outfitId: ID, _ body: LinkImmichAssetsRequest) async throws -> [OutfitPhotoDTO]
+	func unlinkImmichAsset(outfitId: ID, linkId: ID) async throws
+	func suggestionRuns(owner: ID?) async throws -> [SuggestionRunDTO]
+	func suggestionRun(id: ID) async throws -> SuggestionRunDTO
+	func createSuggestionRun(_ body: CreateSuggestionRunRequest, idempotencyKey: String) async throws -> SuggestionRunDTO
+	func dismissSuggestion(id: ID) async throws -> OutfitSuggestionDTO
+	func queueBulkAnalyses(_ body: BulkItemsRequest) async throws -> BulkAnalysesDTO
+	func applyBulkTags(_ body: BulkItemsRequest) async throws -> BulkApplyTagsDTO
+	func immichThumbnail(assetId: ID) async throws -> Data?
+	func outfitImmichImage(outfitId: ID, linkId: ID, variant: PhotoVariant) async throws -> Data?
 }
 
 /// Supplies the bearer token for API requests (implemented by `AuthSession`).
@@ -70,4 +93,30 @@ public protocol TokenProvider: Sendable {
 	/// Called once when the server refused `rejected`; refreshes and returns
 	/// a new token, or throws `APIError.signedOut` (and ends the session).
 	func refreshAfterRejection(of rejected: String) async throws -> String
+}
+
+/// Default implementations allow focused test doubles to implement only their endpoints.
+public extension WardrobeAPI {
+	func outfits(_ query: OutfitQuery) async throws -> OutfitListDTO { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
+	func sharedOutfits() async throws -> [OutfitSummaryDTO] { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
+	func outfit(id: ID) async throws -> OutfitDetailDTO { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
+	func createOutfit(_ body: CreateOutfitRequest, idempotencyKey: String) async throws -> OutfitDetailDTO { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
+	func updateOutfit(id: ID, _ body: UpdateOutfitRequest) async throws -> OutfitDetailDTO { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
+	func deleteOutfit(id: ID) async throws { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
+	func createOutfitShare(outfitId: ID, _ body: CreateOutfitShareRequest) async throws -> OutfitShareDTO { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
+	func deleteOutfitShare(outfitId: ID, shareId: ID) async throws { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
+	func immichStatus() async throws -> ImmichStatusDTO { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
+	func connectImmich(_ body: ConnectImmichRequest) async throws -> ImmichStatusDTO { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
+	func disconnectImmich() async throws { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
+	func immichAssets(_ query: ImmichAssetQuery) async throws -> ImmichAssetListDTO { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
+	func linkImmichAssets(outfitId: ID, _ body: LinkImmichAssetsRequest) async throws -> [OutfitPhotoDTO] { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
+	func unlinkImmichAsset(outfitId: ID, linkId: ID) async throws { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
+	func suggestionRuns(owner: ID?) async throws -> [SuggestionRunDTO] { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
+	func suggestionRun(id: ID) async throws -> SuggestionRunDTO { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
+	func createSuggestionRun(_ body: CreateSuggestionRunRequest, idempotencyKey: String) async throws -> SuggestionRunDTO { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
+	func dismissSuggestion(id: ID) async throws -> OutfitSuggestionDTO { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
+	func queueBulkAnalyses(_ body: BulkItemsRequest) async throws -> BulkAnalysesDTO { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
+	func applyBulkTags(_ body: BulkItemsRequest) async throws -> BulkApplyTagsDTO { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
+	func immichThumbnail(assetId: ID) async throws -> Data? { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
+	func outfitImmichImage(outfitId: ID, linkId: ID, variant: PhotoVariant) async throws -> Data? { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
 }

@@ -11,6 +11,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useState } from "react";
+import { InOutfits } from "@/components/outfits/in-outfits";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import {
@@ -145,6 +146,7 @@ function ItemView({ item }: { item: ItemDetailDto }) {
 						<Details item={item} />
 					)}
 					<SuggestionsPanel item={item} />
+					<InOutfits item={item} />
 					<Movements item={item} />
 				</div>
 			</div>

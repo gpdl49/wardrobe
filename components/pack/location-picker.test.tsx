@@ -31,6 +31,7 @@ const me: MeDto = {
 	username: "me",
 	groups: ["wardrobe"],
 	isAdmin: false,
+	features: { vision: false, suggestions: false, immich: false },
 };
 const notFound = () =>
 	Response.json({ error: "not_found", message: "nope" }, { status: 404 });
