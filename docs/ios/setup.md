@@ -87,7 +87,7 @@ Zitadel console (<https://z.vidur.xyz/ui/console> → Projects → homestacks �
 Applications → `wardrobe-ios` → Client ID) or:
 
 ```fish
-kubectl --context sinkhole -n external-secrets-system get secret wardrobe-ios-oidc -o jsonpath='{.data.client_id}' | base64 -d; echo
+kubectl --context vidur-centerpoint -n wardrobe-system get secret wardrobe-ios-oidc -o jsonpath='{.data.client_id}' | base64 -d; echo
 ```
 
 and store it:

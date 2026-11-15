@@ -66,8 +66,11 @@ Client rules:
   progress at a time; concurrent requests await it). Zitadel rotates refresh
   tokens: always store the new one.
 - **Auth failures**: a 401, a 403 whose body is not the API's JSON error
-  shape (oauth2-proxy rejecting the JWT), or any 3xx to a URL whose path starts
-  with `/oauth2/` means the token was refused. Refresh once and retry the
+  shape (oauth2-proxy rejecting the JWT or the groups), or any 3xx on a
+  request other than `GET /api/photos/{id}/{variant}` (oauth2-proxy sends an
+  unauthenticated request to its sign-in flow, which, with
+  `SKIP_PROVIDER_BUTTON`, is a 302 straight to Zitadel's authorize endpoint)
+  means the token was refused. Refresh once and retry the
   request once; if it fails again, or the refresh fails with
   `invalid_grant`, the session is over: clear the Keychain and show sign-in.
   A 403 with a JSON `{error, message}` body is the API's own "forbidden"

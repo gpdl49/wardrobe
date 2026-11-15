@@ -124,7 +124,7 @@ Implements every `WardrobeAPI` method over URLSession per the contract.
   for bodies, `User-Agent` (contract format), `Idempotency-Key` where the
   method takes one. Bodies encoded once with `JSONEncoder.wardrobe`.
 - Auth failure detection and single retry after `refreshAfterRejection`
-  exactly per contract (401; 403 with non-JSON body; 3xx to `/oauth2/...`).
+  exactly per contract (401; 403 with non-JSON body; any 3xx except on the photo-variant GET).
 - Errors: JSON `{error, message}` → `APIError`; non-JSON → `http_<status>`;
   URLError → status 0 `network`; decoding failure → `decoding`;
   `Retry-After` parsed (seconds or HTTP date).
@@ -134,8 +134,8 @@ Implements every `WardrobeAPI` method over URLSession per the contract.
 - `health`: GET `/api/healthz` without auth, true on 200.
 - **Tests** (URLProtocol stub): path/query/headers per endpoint family;
   bearer injection; Idempotency-Key presence; 401→refresh→retry succeeds;
-  second 401 → `signedOut`; 403 JSON is not retried; 302 to `/oauth2/start`
-  treated as auth failure; photo redirect not followed and no Authorization
+  second 401 → `signedOut`; 403 JSON is not retried; 302 (to Zitadel or `/oauth2/...`)
+  on a JSON endpoint treated as auth failure; photo redirect not followed and no Authorization
   sent to S3; PATCH null encoding; error decoding; Retry-After.
 
 ## WP2 — Auth (`AuthSession`, OIDC, Keychain)
