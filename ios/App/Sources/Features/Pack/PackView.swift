@@ -27,6 +27,7 @@ struct PackView: View {
 					userSub: me.sub,
 					ownerId: appModel.scope?.ownerId
 				)
+				packModel.appModel = appModel
 				self.model = packModel
 				await packModel.loadInitialData()
 			}
@@ -140,7 +141,7 @@ struct PackView: View {
 				}
 
 				Button(role: .destructive) {
-					model.discardActiveSession(active)
+					Task { await model.discardActiveSession(active) }
 				} label: {
 					Text("Discard Session")
 						.font(.headline)

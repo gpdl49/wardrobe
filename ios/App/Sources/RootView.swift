@@ -39,7 +39,10 @@ struct RootView: View {
 				ProgressView("Loading…")
 			}
 		case .granted:
-			MainTabs()
+			MainTabs().errorAlert(Binding(
+				get: { model.bootstrapError },
+				set: { model.bootstrapError = $0 }
+			))
 		}
 	}
 }

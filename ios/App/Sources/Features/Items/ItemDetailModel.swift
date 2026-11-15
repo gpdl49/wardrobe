@@ -68,7 +68,7 @@ final class ItemDetailModel {
 
 		do {
 			async let itemDetail = api.item(id: itemId)
-			async let catList = (try? api.categories()) ?? []
+			async let catList = api.categories()
 
 			let (loadedItem, cats) = try await (itemDetail, catList)
 			self.item = loadedItem
@@ -92,7 +92,7 @@ final class ItemDetailModel {
 			}
 			startPollingIfNeeded()
 		} catch {
-			// Quiet refresh failure
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 		}
 	}
 
@@ -193,7 +193,7 @@ final class ItemDetailModel {
 			if (error as? APIError)?.status == 409 || described == "Vision disabled" {
 				analysisMessage = "Vision analysis is disabled on this server."
 			} else {
-				analysisMessage = described
+				analysisMessage = userFacingAPIError(error, appModel: appModel)
 			}
 		}
 	}

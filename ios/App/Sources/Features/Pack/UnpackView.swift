@@ -24,6 +24,7 @@ struct UnpackView: View {
 					userSub: me.sub,
 					ownerId: appModel.scope?.ownerId
 				)
+				unpackModel.appModel = appModel
 				self.model = unpackModel
 				await unpackModel.loadInitialData()
 			}
@@ -137,7 +138,7 @@ struct UnpackView: View {
 				}
 
 				Button(role: .destructive) {
-					model.discardActiveSession(active)
+					Task { await model.discardActiveSession(active) }
 				} label: {
 					Text("Discard Session")
 						.font(.headline)

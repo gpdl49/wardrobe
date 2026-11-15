@@ -39,6 +39,8 @@ public struct UploadJob: Codable, Hashable, Sendable, Identifiable {
 	public var attempts: Int
 
 	// MARK: Internal State
+	var itemIdempotencyKey: String?
+	var photoIdempotencyKey: String?
 	var isPrepared: Bool
 	var createItemSent: Bool
 	var frozenCreateItemRequest: CreateItemRequest?
@@ -58,6 +60,8 @@ public struct UploadJob: Codable, Hashable, Sendable, Identifiable {
 		self.sessionId = sessionId; self.createdAt = createdAt; self.phase = phase
 		self.step = step; self.itemId = itemId; self.photoId = photoId
 		self.photo = photo; self.lastError = lastError; self.attempts = attempts
+		self.itemIdempotencyKey = UUID().uuidString.lowercased()
+		self.photoIdempotencyKey = UUID().uuidString.lowercased()
 		self.isPrepared = (step != .prepare)
 		self.createItemSent = false
 		self.frozenCreateItemRequest = nil
@@ -71,6 +75,7 @@ public struct UploadJob: Codable, Hashable, Sendable, Identifiable {
 	enum CodingKeys: String, CodingKey {
 		case id, userSub, target, kind, sessionId, createdAt, phase, step
 		case itemId, photoId, photo, lastError, attempts
+		case itemIdempotencyKey, photoIdempotencyKey
 		case isPrepared, createItemSent, frozenCreateItemRequest, pendingUpdateFields
 		case uploadUrl, uploadHeaders, isUploaded, nextAttemptAt
 	}
@@ -91,6 +96,8 @@ public struct UploadJob: Codable, Hashable, Sendable, Identifiable {
 		self.lastError = try container.decodeIfPresent(String.self, forKey: .lastError)
 		self.attempts = try container.decode(Int.self, forKey: .attempts)
 
+		self.itemIdempotencyKey = try container.decodeIfPresent(String.self, forKey: .itemIdempotencyKey)
+		self.photoIdempotencyKey = try container.decodeIfPresent(String.self, forKey: .photoIdempotencyKey)
 		self.isPrepared = try container.decodeIfPresent(Bool.self, forKey: .isPrepared) ?? (step != .prepare)
 		self.createItemSent = try container.decodeIfPresent(Bool.self, forKey: .createItemSent) ?? (itemId != nil)
 		self.frozenCreateItemRequest = try container.decodeIfPresent(CreateItemRequest.self, forKey: .frozenCreateItemRequest)
@@ -117,6 +124,8 @@ public struct UploadJob: Codable, Hashable, Sendable, Identifiable {
 		try container.encodeIfPresent(lastError, forKey: .lastError)
 		try container.encode(attempts, forKey: .attempts)
 
+		try container.encodeIfPresent(itemIdempotencyKey, forKey: .itemIdempotencyKey)
+		try container.encodeIfPresent(photoIdempotencyKey, forKey: .photoIdempotencyKey)
 		try container.encode(isPrepared, forKey: .isPrepared)
 		try container.encode(createItemSent, forKey: .createItemSent)
 		try container.encodeIfPresent(frozenCreateItemRequest, forKey: .frozenCreateItemRequest)
@@ -590,7 +599,7 @@ public final class UploadQueue {
 				j.frozenCreateItemRequest = frozen
 				j.createItemSent = true
 			}
-			let idempotencyKey = "\(jobId.uuidString.lowercased())-item"
+			let idempotencyKey = job.itemIdempotencyKey ?? "\(jobId.uuidString.lowercased())-item"
 			let summary = try await api.createItem(frozen, idempotencyKey: idempotencyKey)
 			activeItemIds.insert(summary.id)
 			updateJob(id: jobId) { j in
@@ -610,7 +619,7 @@ public final class UploadQueue {
 				contentType: "image/jpeg",
 				size: jpegData.count
 			)
-			let idempotencyKey = "\(jobId.uuidString.lowercased())-photo"
+			let idempotencyKey = job.photoIdempotencyKey ?? "\(jobId.uuidString.lowercased())-photo"
 			let uploadDTO = try await api.createPhoto(photoRequest, idempotencyKey: idempotencyKey)
 			updateJob(id: jobId) { j in
 				j.photoId = uploadDTO.photo.id

@@ -115,6 +115,7 @@ struct RemotePhotoView: View {
 				isFailed = true
 			}
 		} catch {
+			_ = model.message(for: error)
 			isFailed = true
 		}
 	}

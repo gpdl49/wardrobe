@@ -35,10 +35,12 @@ final class UnpackModel {
 	var lastMove: (items: [ItemSummaryDTO], toLocation: LocationRef?)?
 	var sessionId: ID?
 	var sessionKey: String?
+	private var pendingSourceId: ID?
 
 	var busy = false
 	var isFinishing = false
 	var errorMessage: String?
+	weak var appModel: AppModel?
 	var showScanner = false
 	var scannerTarget: ScannerTarget = .source
 
@@ -56,8 +58,11 @@ final class UnpackModel {
 
 	func loadInitialData() async {
 		phase = .loading
-		let locs = (try? await api.locations(LocationQuery(owner: ownerId, archived: false))) ?? []
-		self.sourceLocations = locs
+		do {
+			sourceLocations = try await api.locations(LocationQuery(owner: ownerId, archived: false))
+		} catch {
+			errorMessage = userFacingAPIError(error, appModel: appModel)
+		}
 
 		if let saved = store.load(userSub: userSub, mode: .unpack) {
 			phase = .resuming(saved)
@@ -77,19 +82,21 @@ final class UnpackModel {
 			lastMove = nil
 			phase = .unpacking(source: detail)
 		} catch {
-			errorMessage = "Could not resume session: \(error.localizedDescription)"
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 			phase = .chooseSource
 		}
 	}
 
-	func discardActiveSession(_ active: ActiveSession) {
-		store.clear(userSub: userSub, mode: .unpack)
-		Task {
-			try? await api.endSession(id: active.session.id)
+	func discardActiveSession(_ active: ActiveSession) async {
+		do {
+			_ = try await api.endSession(id: active.session.id)
+			store.clear(userSub: userSub, mode: .unpack)
+			sessionId = nil
+			sessionKey = nil
+			phase = .chooseSource
+		} catch {
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 		}
-		sessionId = nil
-		sessionKey = nil
-		phase = .chooseSource
 	}
 
 	func chooseSourceLocation(_ location: LocationDTO) async {
@@ -102,16 +109,20 @@ final class UnpackModel {
 		errorMessage = nil
 		do {
 			let detail = try await api.location(id: location.id)
+			if pendingSourceId != location.id {
+				sessionId = nil
+				sessionKey = nil
+				pendingSourceId = location.id
+			}
+			_ = try await ensureSession(source: detail)
 			items = detail.items
 			selectedItemIds = []
 			lastMove = nil
-			sessionId = nil
-			sessionKey = nil
 			phase = .unpacking(source: detail)
 			busy = false
 		} catch {
 			busy = false
-			errorMessage = (error as? APIError)?.message ?? error.localizedDescription
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 		}
 	}
 
@@ -132,9 +143,12 @@ final class UnpackModel {
 	}
 
 	func prepareDestinationChoice() async {
-		let locs = (try? await api.locations(LocationQuery(owner: ownerId, archived: false))) ?? []
-		self.destinationLocations = locs
-		self.isChoosingDestination = true
+		do {
+			destinationLocations = try await api.locations(LocationQuery(owner: ownerId, archived: false))
+			isChoosingDestination = true
+		} catch {
+			errorMessage = userFacingAPIError(error, appModel: appModel)
+		}
 	}
 
 	func ensureSession(source: LocationDetailDTO) async throws -> ID {
@@ -181,7 +195,7 @@ final class UnpackModel {
 				sessionId = nil
 				sessionKey = nil
 			}
-			errorMessage = (error as? APIError)?.message ?? error.localizedDescription
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 		}
 	}
 
@@ -205,16 +219,21 @@ final class UnpackModel {
 			busy = false
 		} catch {
 			busy = false
-			errorMessage = (error as? APIError)?.message ?? error.localizedDescription
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 		}
 	}
 
 	func finishUnpacking() async {
 		isFinishing = true
-		store.clear(userSub: userSub, mode: .unpack)
-
 		if let sid = sessionId {
-			_ = try? await api.endSession(id: sid)
+			do {
+				_ = try await api.endSession(id: sid)
+				store.clear(userSub: userSub, mode: .unpack)
+			} catch {
+				errorMessage = userFacingAPIError(error, appModel: appModel)
+				isFinishing = false
+				return
+			}
 			isFinishing = false
 			phase = .summary(sessionId: sid)
 		} else {
@@ -230,6 +249,7 @@ final class UnpackModel {
 		lastMove = nil
 		sessionId = nil
 		sessionKey = nil
+		pendingSourceId = nil
 	}
 
 	func resolveScannedCode(_ text: String, baseURL: URL) async {
@@ -281,7 +301,7 @@ final class UnpackModel {
 				}
 			}
 		} catch {
-			errorMessage = (error as? APIError)?.message ?? error.localizedDescription
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 		}
 	}
 }

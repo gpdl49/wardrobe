@@ -70,6 +70,7 @@ struct CatalogueView: View {
 		.task {
 			if model == nil {
 				let m = CatalogueModel(api: appModel.api, scope: appModel.scope)
+				m.appModel = appModel
 				model = m
 				await m.reload()
 				await m.loadMetadata()
@@ -78,6 +79,11 @@ struct CatalogueView: View {
 		.task(id: appModel.scope?.id) {
 			if let model {
 				await model.updateScope(appModel.scope)
+			}
+		}
+		.onChange(of: appModel.uploads.jobs.filter { $0.phase == .done }.map(\.id)) { old, completed in
+			if !Set(completed).subtracting(old).isEmpty {
+				Task { await model?.reload() }
 			}
 		}
 		.sheet(isPresented: $showFiltersSheet, onDismiss: {

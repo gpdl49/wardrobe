@@ -136,6 +136,7 @@ public struct LocationDetailView: View {
 		}
 		.task(id: locationId) {
 			let dModel = LocationDetailModel(api: model.api, locationId: locationId)
+			dModel.appModel = model
 			self.detailModel = dModel
 			await dModel.load()
 		}
@@ -559,4 +560,3 @@ public struct LocationDetailView: View {
 	.environment(AppModel.preview())
 	.environment(Router())
 }
-

@@ -212,6 +212,26 @@ struct LiveWardrobeAPITests {
 		#expect(callCounter.value == 2)
 	}
 
+	@Test func postRetryKeepsIdenticalBodyAndKey() async throws {
+		MockURLProtocol.reset()
+		let tokens = MockTokenProvider(token: "old", refreshResult: "new")
+		let api = makeAPI(tokens: tokens)
+		let calls = Counter()
+		MockURLProtocol.handler = { _ in
+			if calls.increment() == 1 { return self.jsonRaw("{}", status: 401) }
+			return self.jsonDTO(ItemSummaryDTO(id: "item", ownerId: "owner", access: .owner, name: "Coat", createdAt: .now, updatedAt: .now))
+		}
+		let key = UUID().uuidString
+		_ = try await api.createItem(CreateItemRequest(name: "Coat", tags: ["wool", "winter"]), idempotencyKey: key)
+		let requests = MockURLProtocol.recordedRequests
+		#expect(requests.count == 2)
+		#expect(requests[0].body != nil)
+		#expect(requests[0].body == requests[1].body)
+		#expect(requests[0].request.value(forHTTPHeaderField: "Idempotency-Key") == key)
+		#expect(requests[1].request.value(forHTTPHeaderField: "Idempotency-Key") == key)
+		#expect(tokens.refreshCallCount == 1)
+	}
+
 	@Test func second401ThrowsSignedOut() async throws {
 		MockURLProtocol.reset()
 		let tokens = MockTokenProvider(token: "tok-1", refreshResult: "tok-2")

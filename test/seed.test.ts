@@ -1,3 +1,7 @@
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { resolve } from "node:path";
 import pg from "pg";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { DEFAULT_CATEGORIES, seedCategories, slugify } from "@/prisma/seed.mjs";
@@ -27,6 +31,31 @@ describeWithDb("seedCategories", () => {
 
 	afterEach(async () => {
 		await client.end();
+	});
+
+	it("runs the seed command with DATABASE_URL from .env", () => {
+		const dir = mkdtempSync(resolve(tmpdir(), "wardrobe-seed-"));
+		try {
+			writeFileSync(
+				resolve(dir, ".env"),
+				`DATABASE_URL=${TEST_DATABASE_URL}\n`,
+			);
+			const env = { ...process.env };
+			delete env.DATABASE_URL;
+			const result = spawnSync(
+				process.execPath,
+				["--env-file-if-exists=.env", resolve("prisma/seed.mjs")],
+				{
+					cwd: dir,
+					env,
+					encoding: "utf8",
+				},
+			);
+			expect(result.status, result.stderr).toBe(0);
+			expect(result.stdout).toContain("seed: inserted");
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
 	});
 
 	it("inserts a two-level tree once", async () => {

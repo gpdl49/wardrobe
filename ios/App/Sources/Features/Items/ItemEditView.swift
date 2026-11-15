@@ -35,14 +35,14 @@ final class ItemEditModel {
 	func loadAuxiliaryData() async {
 		isLoadingData = true
 		defer { isLoadingData = false }
-		async let locs = try? api.locations(LocationQuery(owner: item.ownerId))
-		async let cats = try? api.categories()
-		async let tags = try? api.tags(owner: item.ownerId)
-
-		let (l, c, t) = await (locs, cats, tags)
-		self.locations = l ?? []
-		self.categories = c ?? []
-		self.tagSuggestions = t ?? []
+		do {
+			async let locs = api.locations(LocationQuery(owner: item.ownerId))
+			async let cats = api.categories()
+			async let tags = api.tags(owner: item.ownerId)
+			(locations, categories, tagSuggestions) = try await (locs, cats, tags)
+		} catch {
+			errorMessage = userFacingAPIError(error, appModel: appModel)
+		}
 	}
 
 	func save() async -> ItemDetailDTO? {

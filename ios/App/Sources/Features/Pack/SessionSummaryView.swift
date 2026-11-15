@@ -157,7 +157,7 @@ struct SessionSummaryView: View {
 			isLoading = false
 		} catch {
 			isLoading = false
-			errorMessage = (error as? APIError)?.message ?? error.localizedDescription
+			errorMessage = appModel.message(for: error)
 		}
 	}
 

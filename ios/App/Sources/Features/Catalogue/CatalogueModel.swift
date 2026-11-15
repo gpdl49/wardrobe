@@ -31,6 +31,7 @@ final class CatalogueModel {
 	private(set) var isLoading = false
 	private(set) var isLoadingMore = false
 	var errorMessage: String?
+	weak var appModel: AppModel?
 	private(set) var hasLoadedOnce = false
 
 	// Filter state
@@ -121,7 +122,7 @@ final class CatalogueModel {
 			nextCursor = response.nextCursor
 			hasLoadedOnce = true
 		} catch {
-			errorMessage = (error as? APIError)?.message ?? error.localizedDescription
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 		}
 
 		isLoading = false
@@ -139,7 +140,7 @@ final class CatalogueModel {
 			items.append(contentsOf: response.items)
 			nextCursor = response.nextCursor
 		} catch {
-			errorMessage = (error as? APIError)?.message ?? error.localizedDescription
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 		}
 
 		isLoadingMore = false
@@ -149,14 +150,14 @@ final class CatalogueModel {
 		isLoadingMetadata = true
 		let ownerId = (scope?.isMine == false) ? scope?.ownerId : nil
 
-		async let locsCall = (try? await api.locations(LocationQuery(owner: ownerId))) ?? []
-		async let catsCall = (try? await api.categories()) ?? []
-		async let tagsCall = (try? await api.tags(owner: ownerId)) ?? []
-
-		let (locs, cats, tgs) = await (locsCall, catsCall, tagsCall)
-		locations = locs
-		categories = cats
-		tags = tgs
+		do {
+			async let locs = api.locations(LocationQuery(owner: ownerId))
+			async let cats = api.categories()
+			async let tgs = api.tags(owner: ownerId)
+			(locations, categories, tags) = try await (locs, cats, tgs)
+		} catch {
+			errorMessage = userFacingAPIError(error, appModel: appModel)
+		}
 		isLoadingMetadata = false
 	}
 

@@ -82,6 +82,42 @@ import WardrobeKitTesting
 		#expect(endedSession.endedAt != nil)
 	}
 
+	@Test func failedFinishKeepsSessionForRetry() async throws {
+		let api = makeFixtureAPI()
+		let queue = makeUploadQueue(api: api)
+		let store = makeStore()
+		let app = AppModel.preview(api: api)
+		let model = PackModel(api: api, uploads: queue, userSub: userSub, store: store)
+		model.appModel = app
+		let bag = LocationRef(id: "bag-1", kind: .bag, code: "B-01", name: "Bag")
+		let session = try await api.createSession(CreateSessionRequest(mode: .pack, locationId: bag.id), idempotencyKey: "key")
+		let active = ActiveSession(session: session, location: bag, idempotencyKey: "key")
+		store.save(userSub: userSub, mode: .pack, active: active)
+		model.phase = .capturing(active: active)
+		await api.setNextError(.signedOut)
+		await model.finishPacking()
+		#expect(model.phase == .capturing(active: active))
+		#expect(store.load(userSub: userSub, mode: .pack) != nil)
+		#expect(app.auth.state == .signedOut)
+	}
+
+	@Test func failedUnpackFinishKeepsSessionForRetry() async throws {
+		let api = makeFixtureAPI()
+		let store = makeStore()
+		let app = AppModel.preview(api: api)
+		let model = UnpackModel(api: api, userSub: userSub, store: store)
+		model.appModel = app
+		let bag = LocationRef(id: "bag-1", kind: .bag, code: "B-01", name: "Bag")
+		let session = try await api.createSession(CreateSessionRequest(mode: .unpack, locationId: bag.id), idempotencyKey: "key")
+		let active = ActiveSession(session: session, location: bag, idempotencyKey: "key")
+		store.save(userSub: userSub, mode: .unpack, active: active)
+		model.sessionId = session.id
+		await api.setNextError(.signedOut)
+		await model.finishUnpacking()
+		#expect(store.load(userSub: userSub, mode: .unpack) != nil)
+		#expect(app.auth.state == .signedOut)
+	}
+
 	// MARK: - Capture Enqueues
 
 	@Test func captureEnqueuesRightTargetAndSession() async throws {
@@ -109,7 +145,12 @@ import WardrobeKitTesting
 		#expect(model.quickCategoryId == "cat-knitwear")
 
 		// Capture label photo
+		let count = queue.jobs.count
 		model.captureLabelPhoto(data: dummyPhoto)
+		if queue.itemId(of: model.selectedJobId!) == nil {
+			#expect(queue.jobs.count == count)
+			#expect(model.errorMessage != nil)
+		}
 	}
 
 	// MARK: - Move Payloads
@@ -124,6 +165,9 @@ import WardrobeKitTesting
 
 		let bag = model.sourceLocations.first(where: { $0.kind == .bag })!
 		await model.chooseSourceLocation(bag)
+		#expect(model.sessionId != nil)
+		#expect((await api.calls).contains("POST /sessions"))
+		#expect(store.load(userSub: userSub, mode: .unpack) != nil)
 
 		if case .unpacking(let source) = model.phase {
 			#expect(source.id == bag.id)
@@ -186,28 +230,21 @@ import WardrobeKitTesting
 
 	@Test func resumeStateSurvivesRelaunch() async throws {
 		let store = makeStore()
-		let session = PackingSessionDTO(
-			id: "session-abc",
-			ownerId: userId,
-			access: .owner,
-			mode: .pack,
-			locationId: "loc-123",
-			startedAt: .now
-		)
+		let api = makeFixtureAPI()
 		let loc = LocationRef(id: "loc-123", kind: .bag, code: "B-09", name: "Duffel Bag")
+		let session = try await api.createSession(CreateSessionRequest(mode: .pack, locationId: loc.id), idempotencyKey: "key-xyz")
 		let active = ActiveSession(session: session, location: loc, idempotencyKey: "key-xyz")
 
 		store.save(userSub: userSub, mode: .pack, active: active)
 
 		// New model instance loading stored session
-		let api = makeFixtureAPI()
 		let queue = makeUploadQueue(api: api)
 		let model = PackModel(api: api, uploads: queue, userSub: userSub, ownerId: userId, store: store)
 
 		await model.loadInitialData()
 
 		if case .resuming(let loaded) = model.phase {
-			#expect(loaded.session.id == "session-abc")
+			#expect(loaded.session.id == session.id)
 			#expect(loaded.location.code == "B-09")
 			#expect(loaded.idempotencyKey == "key-xyz")
 		} else {
@@ -219,7 +256,7 @@ import WardrobeKitTesting
 		#expect(model.phase == .capturing(active: active))
 
 		// Discarding clears store
-		model.discardActiveSession(active)
+		await model.discardActiveSession(active)
 		#expect(store.load(userSub: userSub, mode: .pack) == nil)
 		#expect(model.phase == .chooseLocation)
 	}

@@ -148,6 +148,11 @@ final class ScriptedWardrobeAPI: WardrobeAPI, @unchecked Sendable {
 
 // MARK: - Helpers
 
+private func isUUIDv4(_ value: String?) -> Bool {
+	guard let value, let id = UUID(uuidString: value) else { return false }
+	return id.uuid.6 & 0xf0 == 0x40 && id.uuid.8 & 0xc0 == 0x80
+}
+
 private func makeTestImageData(width: Int = 100, height: Int = 100) -> Data {
 	let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
 	let context = CGContext(
@@ -229,9 +234,10 @@ struct UploadQueueTests {
 		let calls = api.calls
 		#expect(calls.count == 4)
 		#expect(calls[0].method == "POST" && calls[0].path == "/api/items")
-		#expect(calls[0].idempotencyKey == "\(jobId.uuidString.lowercased())-item")
+		#expect(isUUIDv4(calls[0].idempotencyKey))
 		#expect(calls[1].method == "POST" && calls[1].path == "/api/photos")
-		#expect(calls[1].idempotencyKey == "\(jobId.uuidString.lowercased())-photo")
+		#expect(isUUIDv4(calls[1].idempotencyKey))
+		#expect(calls[0].idempotencyKey != calls[1].idempotencyKey)
 		#expect(calls[2].method == "PUT")
 		#expect(calls[3].method == "POST" && calls[3].path.contains("/complete"))
 
@@ -275,6 +281,25 @@ struct UploadQueueTests {
 		#expect(calls.contains { $0.method == "POST" && $0.path == "/api/photos" })
 		#expect(calls.contains { $0.method == "PUT" })
 		#expect(calls.contains { $0.method == "POST" && $0.path.contains("/complete") })
+	}
+
+	@Test @MainActor func legacyJobsKeepTheirOriginalKeys() async throws {
+		let tempDir = try createTempDir()
+		defer { try? FileManager.default.removeItem(at: tempDir) }
+		var job = UploadJob(userSub: "legacy-user", target: .newItem(CreateItemRequest(name: "Legacy")), kind: .main)
+		job.itemIdempotencyKey = nil
+		job.photoIdempotencyKey = nil
+		let store = UploadStore(directory: tempDir)
+		try store.saveOriginalData(makeTestImageData(), for: job.id, userSub: job.userSub)
+		try store.saveJob(job)
+		let api = ScriptedWardrobeAPI()
+		let queue = UploadQueue(api: api, directory: tempDir, sleeper: { _ in })
+		queue.start(userSub: job.userSub)
+		await queue.waitForIdle()
+		let item = api.calls.first { $0.path == "/api/items" }
+		let photo = api.calls.first { $0.path == "/api/photos" }
+		#expect(item?.idempotencyKey == "\(job.id.uuidString.lowercased())-item")
+		#expect(photo?.idempotencyKey == "\(job.id.uuidString.lowercased())-photo")
 	}
 
 	@Test @MainActor func crashAndResumeContinuesFromInterruptedStep() async throws {
@@ -383,7 +408,7 @@ struct UploadQueueTests {
 		#expect(itemCreates.count == 2)
 		// Both attempts must use the EXACT same idempotency key and frozen initial name
 		for call in itemCreates {
-			#expect(call.idempotencyKey == "\(jobId.uuidString.lowercased())-item")
+			#expect(call.idempotencyKey == itemCreates[0].idempotencyKey)
 			#expect(call.bodySummary == "Scarf")
 		}
 
@@ -433,8 +458,8 @@ struct UploadQueueTests {
 
 		let photoCreates = api.calls.filter { $0.method == "POST" && $0.path == "/api/photos" }
 		#expect(photoCreates.count == 2)
-		#expect(photoCreates[0].idempotencyKey == "\(jobId.uuidString.lowercased())-photo")
-		#expect(photoCreates[1].idempotencyKey == "\(jobId.uuidString.lowercased())-photo")
+		#expect(isUUIDv4(photoCreates[0].idempotencyKey))
+		#expect(photoCreates[1].idempotencyKey == photoCreates[0].idempotencyKey)
 
 		let puts = api.calls.filter { $0.method == "PUT" }
 		#expect(puts.count == 2)

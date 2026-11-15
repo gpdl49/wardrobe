@@ -19,6 +19,7 @@ public final class LocationCodeResolverModel {
 	public let myId: ID?
 
 	public private(set) var state: State = .loading
+	weak var appModel: AppModel?
 
 	public init(api: any WardrobeAPI, ownerId: ID, code: String, myId: ID?) {
 		self.api = api
@@ -38,7 +39,7 @@ public final class LocationCodeResolverModel {
 				let isMine = myId != nil && ownerId == myId
 				state = .notFound(canCreate: isMine)
 			} else {
-				state = .error((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+				if let message = userFacingAPIError(error, appModel: appModel) { state = .error(message) }
 			}
 		}
 	}

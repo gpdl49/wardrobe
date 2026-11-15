@@ -67,3 +67,10 @@ Local commands: `mise run ios:generate`, `mise run ios:test-kit`,
 arguments `-fixtures` (in-memory data, signed in) and
 `-devServer http://localhost:3000` (a local `AUTH_MODE=dev` server, no
 sign-in).
+
+The `Wardrobe` scheme runs fixture UI tests; local-server tests are skipped
+unless the `WardrobeLocalReview` or `WardrobeOfflineReview` scheme is used.
+Those tests require a seeded dev server and the disposable review data named
+in `ios/UITests/LocalServerTests.swift`. The external-link and offline tests
+print prompts for the corresponding `simctl openurl` and server stop/restart
+steps; run them individually when performing those manual checks.

@@ -51,9 +51,7 @@ final class SharingModel {
 				await appModel.refreshShares()
 			}
 		} catch {
-			errorMessage = appModel?.message(for: error)
-				?? (error as? LocalizedError)?.errorDescription
-				?? error.localizedDescription
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 		}
 		isLoading = false
 	}
@@ -93,11 +91,11 @@ final class SharingModel {
 			isSubmitting = false
 			// 422: unknown grantee / self / invalid location
 			// 409: already shared with that user
-			formError = apiError.message
+			formError = userFacingAPIError(apiError, appModel: appModel)
 			return false
 		} catch {
 			isSubmitting = false
-			formError = appModel?.message(for: error) ?? error.localizedDescription
+			formError = userFacingAPIError(error, appModel: appModel)
 			return false
 		}
 	}
@@ -115,9 +113,7 @@ final class SharingModel {
 				await appModel.refreshShares()
 			}
 		} catch {
-			errorMessage = appModel?.message(for: error)
-				?? (error as? LocalizedError)?.errorDescription
-				?? error.localizedDescription
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 		}
 	}
 
@@ -140,9 +136,7 @@ final class SharingModel {
 				await appModel.refreshShares()
 			}
 		} catch {
-			errorMessage = appModel?.message(for: error)
-				?? (error as? LocalizedError)?.errorDescription
-				?? error.localizedDescription
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 		}
 	}
 

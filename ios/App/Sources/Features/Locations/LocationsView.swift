@@ -71,6 +71,7 @@ public struct LocationsView: View {
 		))
 		.task(id: model.scope?.ownerId) {
 			let lm = locationsModel ?? LocationsModel(api: model.api)
+			lm.appModel = model
 			lm.ownerId = model.scope?.isMine == true ? nil : model.scope?.ownerId
 			self.locationsModel = lm
 			await lm.load()
@@ -285,4 +286,3 @@ struct LocationRowView: View {
 	.environment(AppModel.preview())
 	.environment(Router())
 }
-

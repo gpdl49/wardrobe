@@ -77,6 +77,7 @@ public struct LocationCodeResolverView: View {
 				code: code,
 				myId: model.me?.id
 			)
+			rModel.appModel = model
 			self.resolverModel = rModel
 			await rModel.resolve()
 		}
@@ -90,4 +91,3 @@ public struct LocationCodeResolverView: View {
 	.environment(AppModel.preview())
 	.environment(Router())
 }
-

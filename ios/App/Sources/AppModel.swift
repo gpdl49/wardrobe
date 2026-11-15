@@ -73,14 +73,15 @@ final class AppModel {
 		} catch let e as APIError where e.isForbidden {
 			accessState = .denied
 		} catch let e as APIError where e.isSignedOut {
-			auth.sessionEnded()
+			_ = message(for: e)
 		} catch {
-			bootstrapError = error.localizedDescription
+			bootstrapError = message(for: error)
 		}
 	}
 
 	func refreshShares() async {
-		if let list = try? await api.sharedWithMe() { sharedWithMe = list }
+		do { sharedWithMe = try await api.sharedWithMe() }
+		catch { bootstrapError = message(for: error) }
 	}
 
 	func signOut() async {
@@ -94,7 +95,13 @@ final class AppModel {
 	/// on `signed_out`, else returns a message to show.
 	func message(for error: any Error) -> String? {
 		if error is CancellationError { return nil }
-		if let e = error as? APIError, e.error == APIError.signedOut.error { auth.sessionEnded(); return nil }
+		if let e = error as? APIError, e.error == APIError.signedOut.error {
+			uploads.pause()
+			me = nil; scope = nil; sharedWithMe = []; accessState = .unknown
+			auth.sessionEnded()
+			Task { await images.clear() }
+			return nil
+		}
 		return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
 	}
 }

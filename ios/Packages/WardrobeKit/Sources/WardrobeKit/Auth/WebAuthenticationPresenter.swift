@@ -29,9 +29,19 @@ public struct WebAuthenticationPresenter: AuthPresenter, Sendable {
 @MainActor
 private final class SessionRunner: NSObject, ASWebAuthenticationPresentationContextProviding {
 	private var session: ASWebAuthenticationSession?
+	#if canImport(UIKit) && !os(watchOS)
+	private var anchor: UIWindow?
+	#endif
 
 	func authenticate(url: URL, callbackScheme: String) async throws -> URL {
-		try await withCheckedThrowingContinuation { continuation in
+		#if canImport(UIKit) && !os(watchOS)
+		let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+		guard let scene = scenes.first(where: { $0.windows.contains(where: { $0.isKeyWindow }) }) ?? scenes.first else {
+			throw APIError(status: 500, error: "auth_failed", message: "No window is available for sign-in")
+		}
+		anchor = scene.windows.first(where: { $0.isKeyWindow }) ?? scene.windows.first ?? UIWindow(windowScene: scene)
+		#endif
+		return try await withCheckedThrowingContinuation { continuation in
 			let authSession = ASWebAuthenticationSession(
 				url: url,
 				callback: .customScheme(callbackScheme)
@@ -66,20 +76,8 @@ private final class SessionRunner: NSObject, ASWebAuthenticationPresentationCont
 
 	func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
 		#if canImport(UIKit) && !os(watchOS)
-		let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-		for scene in scenes {
-			if let keyWindow = scene.windows.first(where: { $0.isKeyWindow }) {
-				return keyWindow
-			}
-			if let firstWindow = scene.windows.first {
-				return firstWindow
-			}
-		}
-		if let scene = scenes.first {
-			return UIWindow(windowScene: scene)
-		}
-		assertionFailure("No UIWindowScene available for authentication presentation anchor")
-		return scenes.first.map(UIWindow.init(windowScene:)) ?? UIWindow(frame: .zero)
+		guard let anchor else { preconditionFailure("Authentication presentation anchor was not prepared") }
+		return anchor
 		#elseif canImport(AppKit) && !targetEnvironment(macCatalyst)
 		return NSApplication.shared.windows.first ?? NSWindow()
 		#else

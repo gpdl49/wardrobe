@@ -11,6 +11,7 @@ public final class LocationsModel {
 	public private(set) var locations: [LocationDTO] = []
 	public private(set) var isLoading: Bool = false
 	public var errorMessage: String?
+	weak var appModel: AppModel?
 
 	// Filter criteria
 	public var ownerId: ID?
@@ -70,7 +71,7 @@ public final class LocationsModel {
 			)
 			locations = try await api.locations(query)
 		} catch {
-			errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 		}
 	}
 

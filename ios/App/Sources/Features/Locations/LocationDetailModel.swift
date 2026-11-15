@@ -13,6 +13,7 @@ public final class LocationDetailModel {
 	public private(set) var parentLocation: LocationDTO?
 	public private(set) var isLoading: Bool = false
 	public var errorMessage: String?
+	weak var appModel: AppModel?
 	public private(set) var isDeleted: Bool = false
 
 	// Multi-select for moving items
@@ -40,13 +41,13 @@ public final class LocationDetailModel {
 
 			if let parentId = d.parentId {
 				// Attempt to fetch parent for display
-				let parents = try? await api.locations(LocationQuery(owner: d.ownerId, archived: true))
-				self.parentLocation = parents?.first(where: { $0.id == parentId })
+				let parents = try await api.locations(LocationQuery(owner: d.ownerId, archived: true))
+				self.parentLocation = parents.first(where: { $0.id == parentId })
 			} else {
 				self.parentLocation = nil
 			}
 		} catch {
-			errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 		}
 	}
 
@@ -58,7 +59,7 @@ public final class LocationDetailModel {
 			_ = try await api.updateLocation(id: locationId, req)
 			await load()
 		} catch {
-			errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 		}
 	}
 
@@ -70,7 +71,7 @@ public final class LocationDetailModel {
 			_ = try await api.updateLocation(id: locationId, req)
 			await load()
 		} catch {
-			errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 		}
 	}
 
@@ -83,7 +84,7 @@ public final class LocationDetailModel {
 			if APIErrorStatus.status(of: error) == 409 {
 				errorMessage = "Still holds items"
 			} else {
-				errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+				errorMessage = userFacingAPIError(error, appModel: appModel)
 			}
 			throw error
 		}
@@ -99,7 +100,7 @@ public final class LocationDetailModel {
 			isSelectingItems = false
 			await load()
 		} catch {
-			errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 		}
 	}
 }

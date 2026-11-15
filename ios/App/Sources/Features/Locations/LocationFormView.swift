@@ -153,7 +153,8 @@ struct LocationFormView: View {
 
 	private func loadParents() async {
 		let effectiveOwner = location?.ownerId ?? ownerId ?? model.me?.id
-		if let list = try? await model.api.locations(LocationQuery(owner: effectiveOwner, archived: true)) {
+		do {
+			let list = try await model.api.locations(LocationQuery(owner: effectiveOwner, archived: true))
 			availableParents = list
 			if !isEditing && code.isEmpty {
 				code = nextFreeCode(from: list.map(\.code), kind: kind)
@@ -162,6 +163,7 @@ struct LocationFormView: View {
 				}
 			}
 		}
+		catch { errorMessage = model.message(for: error) }
 	}
 
 	private func save() async {

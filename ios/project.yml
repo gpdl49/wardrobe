@@ -48,8 +48,7 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSRequiresIPhoneOS: true
         ITSAppUsesNonExemptEncryption: false
-        UILaunchScreen:
-          UIColorName: LaunchBackground
+        UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
         UISupportedInterfaceOrientations:
@@ -93,15 +92,49 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: xyz.vidur.wardrobe.tests
+  WardrobeUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: Wardrobe
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: xyz.vidur.wardrobe.uitests
 schemes:
   Wardrobe:
     build:
       targets:
         Wardrobe: all
         WardrobeTests: [test]
+        WardrobeUITests: [test]
     test:
       targets:
         - WardrobeTests
+        - WardrobeUITests
       gatherCoverageData: false
     archive:
       config: Release
+  WardrobeLocalReview:
+    build:
+      targets:
+        Wardrobe: all
+        WardrobeUITests: [test]
+    test:
+      targets:
+        - WardrobeUITests
+      environmentVariables:
+        WARDROBE_LIVE_REVIEW: "1"
+  WardrobeOfflineReview:
+    build:
+      targets:
+        Wardrobe: all
+        WardrobeUITests: [test]
+    test:
+      targets:
+        - WardrobeUITests
+      environmentVariables:
+        WARDROBE_LIVE_REVIEW: "1"
+        WARDROBE_OFFLINE_REVIEW: "1"

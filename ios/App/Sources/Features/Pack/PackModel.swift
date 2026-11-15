@@ -35,6 +35,7 @@ final class PackModel {
 	var isStarting = false
 	var isFinishing = false
 	var errorMessage: String?
+	weak var appModel: AppModel?
 
 	init(
 		api: any WardrobeAPI,
@@ -53,12 +54,13 @@ final class PackModel {
 	/// Checks for a saved session or prepares location selection.
 	func loadInitialData() async {
 		phase = .loading
-		async let locsTask = (try? await api.locations(LocationQuery(owner: ownerId, archived: false))) ?? []
-		async let catsTask = (try? await api.categories()) ?? []
-
-		let (locs, cats) = await (locsTask, catsTask)
-		self.locations = locs
-		self.categories = cats
+		do {
+			async let locs = api.locations(LocationQuery(owner: ownerId, archived: false))
+			async let cats = api.categories()
+			(locations, categories) = try await (locs, cats)
+		} catch {
+			errorMessage = userFacingAPIError(error, appModel: appModel)
+		}
 
 		if let saved = store.load(userSub: userSub, mode: .pack) {
 			phase = .resuming(saved)
@@ -71,12 +73,14 @@ final class PackModel {
 		phase = .capturing(active: active)
 	}
 
-	func discardActiveSession(_ active: ActiveSession) {
-		store.clear(userSub: userSub, mode: .pack)
-		Task {
-			try? await api.endSession(id: active.session.id)
+	func discardActiveSession(_ active: ActiveSession) async {
+		do {
+			_ = try await api.endSession(id: active.session.id)
+			store.clear(userSub: userSub, mode: .pack)
+			phase = .chooseLocation
+		} catch {
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 		}
-		phase = .chooseLocation
 	}
 
 	func chooseLocation(_ location: LocationDTO) {
@@ -106,7 +110,7 @@ final class PackModel {
 			isStarting = false
 		} catch {
 			isStarting = false
-			errorMessage = (error as? APIError)?.message ?? error.localizedDescription
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 		}
 	}
 
@@ -149,21 +153,14 @@ final class PackModel {
 		guard case .capturing(let active) = phase, let selectedJobId else { return }
 
 		do {
-			let target: UploadTarget
-			if let itemId = uploads.itemId(of: selectedJobId) {
-				target = .item(itemId)
-			} else {
-				target = .newItem(
-					CreateItemRequest(
-						locationId: active.location.id,
-						sessionId: active.session.id
-					)
-				)
+			guard let itemId = uploads.itemId(of: selectedJobId) else {
+				errorMessage = "Wait for the item to be created before adding its label photo."
+				return
 			}
 			_ = try uploads.enqueue(
 				imageData: data,
 				kind: .label,
-				target: target,
+				target: .item(itemId),
 				sessionId: active.session.id
 			)
 		} catch {
@@ -201,12 +198,13 @@ final class PackModel {
 	func finishPacking() async {
 		guard case .capturing(let active) = phase else { return }
 		isFinishing = true
-		store.clear(userSub: userSub, mode: .pack)
-
 		do {
 			_ = try await api.endSession(id: active.session.id)
+			store.clear(userSub: userSub, mode: .pack)
 		} catch {
-			// Even if ending the remote session fails, items are preserved on server/queue
+			errorMessage = userFacingAPIError(error, appModel: appModel)
+			isFinishing = false
+			return
 		}
 
 		isFinishing = false
@@ -263,7 +261,7 @@ final class PackModel {
 
 			chooseLocation(resolvedLocation)
 		} catch {
-			errorMessage = (error as? APIError)?.message ?? error.localizedDescription
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 		}
 	}
 

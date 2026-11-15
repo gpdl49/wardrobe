@@ -10,6 +10,7 @@ struct AddExistingItemSheet: View {
 	let onAdded: (ItemSummaryDTO) -> Void
 
 	@Environment(\.dismiss) private var dismiss
+	@Environment(AppModel.self) private var appModel
 	@State private var searchText = ""
 	@State private var searchResults: [ItemSummaryDTO] = []
 	@State private var isLoading = false
@@ -121,7 +122,7 @@ struct AddExistingItemSheet: View {
 		} catch {
 			isLoading = false
 			if !(error is CancellationError) {
-				errorMessage = error.localizedDescription
+				errorMessage = appModel.message(for: error)
 			}
 		}
 	}
@@ -142,7 +143,7 @@ struct AddExistingItemSheet: View {
 				searchResults.removeAll { $0.id == item.id }
 			} catch {
 				addingItemId = nil
-				errorMessage = error.localizedDescription
+				errorMessage = appModel.message(for: error)
 			}
 		}
 	}

@@ -275,8 +275,11 @@ import Testing
 		final class CapturedState: @unchecked Sendable {
 			private let lock = NSLock()
 			private var nonce: String?
+			private var challenge: String?
 			func setNonce(_ n: String?) { lock.withLock { nonce = n } }
 			func getNonce() -> String? { lock.withLock { nonce } }
+			func setChallenge(_ value: String?) { lock.withLock { challenge = value } }
+			func getChallenge() -> String? { lock.withLock { challenge } }
 		}
 		let captured = CapturedState()
 
@@ -290,6 +293,10 @@ import Testing
 			let body = String(decoding: bodyData, as: UTF8.self)
 			#expect(body.contains("grant_type=authorization_code"))
 			#expect(body.contains("code=auth_code_123"))
+			let values = URLComponents(string: "https://example.test/?" + body)?.queryItems ?? []
+			let verifier = values.first { $0.name == "code_verifier" }?.value ?? ""
+			#expect(!verifier.isEmpty)
+			#expect(PKCE.codeChallenge(for: verifier) == captured.getChallenge())
 
 			let newJWT = makeTestJWT(
 				sub: "usr_signin_success",
@@ -316,6 +323,15 @@ import Testing
 
 		let presenter = TestAuthPresenter(onAuthenticate: { url, scheme in
 			let components = URLComponents(url: url, resolvingAgainstBaseURL: true)!
+			#expect(url.path == "/oauth/v2/authorize")
+			#expect(scheme == "xyz.vidur.wardrobe")
+			let query = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+			#expect(query["client_id"] == "wardrobe-ios")
+			#expect(query["redirect_uri"] == "xyz.vidur.wardrobe://oauth/callback")
+			#expect(query["scope"] == "openid email profile offline_access")
+			#expect(query["response_type"] == "code")
+			#expect(query["code_challenge_method"] == "S256")
+			captured.setChallenge(query["code_challenge"])
 			let state = components.queryItems?.first(where: { $0.name == "state" })?.value ?? ""
 			let nonce = components.queryItems?.first(where: { $0.name == "nonce" })?.value
 			captured.setNonce(nonce)
