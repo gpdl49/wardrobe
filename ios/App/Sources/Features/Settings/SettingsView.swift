@@ -36,6 +36,7 @@ private struct SettingsContent: View {
 	var body: some View {
 		List {
 			accountSection
+			ImmichSettingsSection()
 			uploadsSection
 			cacheSection
 			webAppSection
