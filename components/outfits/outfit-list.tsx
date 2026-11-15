@@ -4,7 +4,7 @@ import { useState } from "react";
 import { WardrobeSwitcher } from "@/components/sharing/wardrobe-switcher";
 import { Button, buttonClass } from "@/components/ui/button";
 import { ErrorText, Loading } from "@/components/ui/feedback";
-import { Select } from "@/components/ui/field";
+import { Input, Select } from "@/components/ui/field";
 import type { Season } from "@/lib/api/types";
 import { useCurrentUser } from "@/lib/client/current-user";
 import { useOutfits, useSharedOutfits } from "@/lib/client/outfits";
@@ -64,18 +64,18 @@ export function OutfitList() {
 				onChange={(e) => setQ(e.target.value)}
 			/>
 			<div className="flex gap-2">
-				<Select
+				<Input
 					aria-label="Tag"
+					placeholder="Filter by tag"
+					list="outfit-tag-options"
 					value={tag}
 					onChange={(e) => setTag(e.target.value)}
-				>
-					<option value="">All tags</option>
+				/>
+				<datalist id="outfit-tag-options">
 					{tags.data?.map((t) => (
-						<option key={t.name} value={t.name}>
-							{t.name}
-						</option>
+						<option key={t.name} value={t.name} />
 					))}
-				</Select>
+				</datalist>
 				<Select
 					aria-label="Season"
 					value={season}

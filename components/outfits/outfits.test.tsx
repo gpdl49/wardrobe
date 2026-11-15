@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import type { OutfitDetailDto, OutfitPhotoDto } from "@/lib/api/types";
-import { mockApi, renderWithQuery } from "@/test/helpers/dom";
+import { mockApi, renderWithQuery, requests } from "@/test/helpers/dom";
 import { OutfitDetail } from "./outfit-detail";
+import { OutfitList } from "./outfit-list";
 import { OutfitImage } from "./outfit-tile";
 
 vi.mock("next/navigation", () => ({
@@ -117,4 +119,21 @@ it("sends outfit filters to the list API", async () => {
 		season: "winter",
 		q: "coat",
 	});
+});
+
+it("filters by a tag that is only used on outfits", async () => {
+	const fetch = mockApi({
+		"GET /api/me": { features: { suggestions: false } },
+		"GET /api/shared-with-me": [],
+		"GET /api/tags": [],
+		"GET /api/outfits": { outfits: [], nextCursor: null },
+		"GET /api/outfits/shared-with-me": [],
+	});
+	renderWithQuery(<OutfitList />);
+	await userEvent.setup().type(screen.getByLabelText("Tag"), "formal");
+	await waitFor(() =>
+		expect(requests(fetch).some((r) => r.search.includes("tag=formal"))).toBe(
+			true,
+		),
+	);
 });
