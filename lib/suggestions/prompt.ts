@@ -18,11 +18,17 @@ export type TasteExample = {
 	tags: readonly string[];
 };
 
-// GPT-5.6 Luna supports structured outputs at $0.20/M input and $1.20/M
-// output (https://openrouter.ai/openai/gpt-5.6-luna). A 40k-input, 2k-output
-// run costs about $0.0104 before cache charges. This is a quality judgement,
-// not a measured taste benchmark; OPENROUTER_TEXT_MODEL can override it.
-export const DEFAULT_TEXT_MODEL = "openai/gpt-5.6-luna";
+// Claude Haiku 5.5 (October 2026) supports strict structured outputs on
+// OpenRouter at $0.10/M input and $0.50/M output
+// (https://openrouter.ai/anthropic/claude-haiku-5.5): a 40k-input, 2k-output
+// run is about $0.005, so a few runs a day fit the $5/month key shared with
+// vision. At that price it scores highest of the cheap tier on the Artificial
+// Analysis Intelligence Index v5 (36, against 28 for GPT-6 Luna at the same
+// price and 32.6 for DeepSeek V4.1 Flash); GPT-5.6 Luna costs twice as much.
+// No published benchmark ranks models on outfit composition, so this is a
+// judgement, not a measured taste result. It takes no `temperature` (run.ts
+// omits it). OPENROUTER_TEXT_MODEL overrides the default.
+export const DEFAULT_TEXT_MODEL = "anthropic/claude-haiku-5.5";
 export const SUGGESTION_SCHEMA_NAME = "outfit_suggestions";
 export const suggestionJsonSchema = {
 	type: "object",

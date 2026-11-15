@@ -8,7 +8,7 @@ import {
 
 describe("suggestion prompt", () => {
 	it("uses the selected structured-output text model", () => {
-		expect(DEFAULT_TEXT_MODEL).toBe("openai/gpt-5.6-luna");
+		expect(DEFAULT_TEXT_MODEL).toBe("anthropic/claude-haiku-5.5");
 	});
 	it("keeps user text in JSON data, separate from instructions", () => {
 		const messages = buildSuggestionMessages(
