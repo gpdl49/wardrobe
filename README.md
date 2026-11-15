@@ -141,3 +141,8 @@ out.
 
 Wardrobe has a companion native iOS app for iPhone and iPad (SwiftUI, iOS 26+).
 See [docs/ios/](docs/ios/) for architecture, development plan, and setup.
+
+## Releases
+
+Versioned releases of the web app, container image and iOS app are described in
+[docs/releasing.md](docs/releasing.md).

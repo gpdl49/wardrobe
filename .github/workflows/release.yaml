@@ -1,0 +1,138 @@
+name: release
+
+# Normally started by release-please: merging its release PR tags vX.Y.Z (with a
+# draft GitHub Release) and runs this workflow on that tag. A tag pushed by hand
+# runs it too. The tag must match package.json, ios/project.yml and the manifest;
+# see docs/releasing.md.
+#
+# Run it by hand from the Actions tab to try the image build without publishing.
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      prerelease: ${{ steps.check.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: check
+        run: |
+          pkg=$(node -p 'require("./package.json").version')
+          ios=$(sed -nE 's/^    MARKETING_VERSION: "([^"]+)".*/\1/p' ios/project.yml)
+          manifest=$(node -p 'require("./.release-please-manifest.json")["."]')
+          test -n "$pkg" && test -n "$ios" && test -n "$manifest" || { echo "::error::Missing release version"; exit 1; }
+          test "$pkg" = "$manifest" || { echo "::error::package.json ($pkg) and manifest ($manifest) differ"; exit 1; }
+          test "$ios" = "$manifest" || { echo "::error::ios/project.yml ($ios) and manifest ($manifest) differ"; exit 1; }
+          if [ "$GITHUB_REF_TYPE" != tag ]; then
+            echo "version=$manifest-dev.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          version="${GITHUB_REF_NAME#v}"
+          echo "tag=$version package=$pkg ios=$ios manifest=$manifest"
+          test "$version" = "$pkg" || { echo "::error::package.json is $pkg, tag is $version"; exit 1; }
+          test "$version" = "$manifest" || { echo "::error::manifest is $manifest, tag is $version"; exit 1; }
+          grep -q "^## \[$version\]" CHANGELOG.md || { echo "::error::CHANGELOG.md has no [$version] section"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$version" == *-* ]]; then echo "prerelease=true"; else echo "prerelease=false"; fi >> "$GITHUB_OUTPUT"
+
+  image:
+    needs: version
+    runs-on: homestacks-runners
+    permissions:
+      contents: read
+      packages: write
+    # This runner sets ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER, so a job without a
+    # container: block is rejected before any step runs.
+    container:
+      image: quay.io/buildah/stable@sha256:ef42cb6cbbe374d1f2d9c8c8e65610b2c21beb277562b6d99a4b632cb78faa70
+      options: --privileged
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Login to GHCR
+        if: github.ref_type == 'tag'
+        run: |
+          printf '%s' '${{ secrets.GITHUB_TOKEN }}' | buildah login ghcr.io \
+            --username '${{ github.actor }}' \
+            --password-stdin
+
+      - name: Build image
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          minor="${VERSION%.*}"
+          tags=(ghcr.io/gpdl49/wardrobe:"$VERSION")
+          if [ "${{ needs.version.outputs.prerelease }}" != true ]; then
+            tags+=(ghcr.io/gpdl49/wardrobe:"$minor")
+          fi
+          tag_args=()
+          for tag in "${tags[@]}"; do
+            tag_args+=(--tag "$tag")
+          done
+          buildah --storage-driver=vfs bud \
+            --isolation=chroot \
+            --file Dockerfile \
+            "${tag_args[@]}" \
+            --label "org.opencontainers.image.version=$VERSION" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            .
+
+      - name: Push image
+        if: github.ref_type == 'tag'
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          minor="${VERSION%.*}"
+          tags=(ghcr.io/gpdl49/wardrobe:"$VERSION")
+          if [ "${{ needs.version.outputs.prerelease }}" != true ]; then
+            tags+=(ghcr.io/gpdl49/wardrobe:"$minor")
+          fi
+          for tag in "${tags[@]}"; do
+            buildah --storage-driver=vfs push --tls-verify=true "$tag" "docker://$tag"
+          done
+
+  publish:
+    needs: [version, image]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Release notes
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          awk -v v="$VERSION" '
+            index($0, "## [" v "]") == 1 { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          {
+            echo
+            echo "Image: \`ghcr.io/gpdl49/wardrobe:$VERSION\`"
+          } >> notes.md
+      # release-please has already made a draft release for this tag; fill notes
+      # and publish it. A tag pushed by hand has no release yet.
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.version }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+        run: |
+          flags=(--title "wardrobe v$VERSION" --notes-file notes.md)
+          if gh release view "$GITHUB_REF_NAME" --json isDraft > /dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" "${flags[@]}" --prerelease="$PRERELEASE" --draft=false
+          else
+            if [ "$PRERELEASE" = true ]; then flags+=(--prerelease); fi
+            gh release create "$GITHUB_REF_NAME" --verify-tag "${flags[@]}"
+          fi
