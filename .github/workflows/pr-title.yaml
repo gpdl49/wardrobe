@@ -1,7 +1,9 @@
 name: pr-title
 
-# Merge commits on main feed release-please, so the PR title must be a
-# Conventional Commit: `type(scope): summary`. See docs/releasing.md and AGENTS.md.
+# Keeps PR titles in Conventional Commit form for squash merges (recommended in
+# docs/releasing.md). With merge commits, release-please reads branch commits;
+# this workflow still checks titles and single-commit messages via
+# validateSingleCommit. Format: `type(scope): summary`. See AGENTS.md.
 
 on:
   pull_request:

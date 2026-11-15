@@ -6,7 +6,7 @@
 	"draft": true,
 	"force-tag-creation": true,
 	"pull-request-title-pattern": "chore: release ${version}",
-	"pull-request-header": "Merging this tags the release and starts the builds. The release stays a draft until every build is attached.",
+	"pull-request-header": "Merging this tags the release, builds the versioned image and uploads the iOS build to TestFlight. The release stays a draft until the image is pushed.",
 	"changelog-sections": [
 		{
 			"type": "feat",
