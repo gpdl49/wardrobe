@@ -44,6 +44,27 @@ const envSchema = z
 			z.string().min(1),
 			DEFAULT_VISION_MODEL,
 		),
+		/**
+		 * Text model for outfit suggestions (lib/suggestions). The default is
+		 * chosen there; this only overrides it.
+		 */
+		OPENROUTER_TEXT_MODEL: optional(z.string().min(1)),
+		/** Immich base URL, without a trailing slash or `/api`. */
+		IMMICH_URL: optional(
+			z
+				.url({ protocol: /^https?$/ })
+				.transform((v) => v.replace(/\/+$/, ""))
+				.refine((v) => !v.endsWith("/api"), "leave out the /api suffix"),
+		),
+		/** Base64 of 32 random bytes: AES-256-GCM key for stored Immich API keys. */
+		SECRETS_KEY: optional(
+			z
+				.string()
+				.refine(
+					(v) => Buffer.from(v, "base64").length === 32,
+					"must be base64 of exactly 32 bytes",
+				),
+		),
 		/** Not in the contract: "false" keeps the pg-boss worker from starting. */
 		JOBS_ENABLED: withDefault(
 			z.enum(["true", "false"]).transform((v) => v === "true"),
@@ -129,4 +150,23 @@ export function resetEnvCache(): void {
 /** Whether vision analysis can run (OPENROUTER_API_KEY is set). */
 export function analysisEnabled(e: Env = env()): boolean {
 	return Boolean(e.OPENROUTER_API_KEY);
+}
+
+/** Whether outfit suggestions can run (OPENROUTER_API_KEY is set). */
+export function suggestionsEnabled(e: Env = env()): boolean {
+	return Boolean(e.OPENROUTER_API_KEY);
+}
+
+/** Whether Immich photos can be linked (IMMICH_URL and SECRETS_KEY are set). */
+export function immichEnabled(e: Env = env()): boolean {
+	return Boolean(e.IMMICH_URL && e.SECRETS_KEY);
+}
+
+/** The optional features that are on, as GET /api/me reports them. */
+export function features(e: Env = env()) {
+	return {
+		vision: analysisEnabled(e),
+		suggestions: suggestionsEnabled(e),
+		immich: immichEnabled(e),
+	};
 }

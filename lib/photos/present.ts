@@ -14,6 +14,7 @@ export function toPhotoDto(photo: Photo, access: Access): PhotoDto {
 		ownerId: photo.ownerId,
 		access,
 		itemId: photo.itemId,
+		outfitId: photo.outfitId,
 		kind: photo.kind,
 		status: photo.status,
 		contentType: photo.contentType,

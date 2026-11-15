@@ -11,6 +11,10 @@ import { forbidden, notFound } from "@/lib/http/errors";
  * No access is a 404 (the row might as well not exist); view access on a write
  * is a 403. A location share covers that location, the locations nested in it
  * and the items in them. The strongest applicable grant wins.
+ *
+ * Outfits (docs/outfits/contract.md): a whole-wardrobe share covers the
+ * owner's outfits at its level, an outfit share gives view access to one
+ * outfit, and a location share gives none.
  */
 
 export type AccessContext = {
@@ -21,6 +25,8 @@ export type AccessContext = {
 	locations: ReadonlyMap<string, { ownerId: string; access: ShareAccess }>;
 	/** Locations shared directly (not just nested in one that is). */
 	sharedRoots: ReadonlySet<string>;
+	/** Outfits shared directly with the viewer (view access), by outfit id. */
+	outfits: ReadonlySet<string>;
 };
 
 type ShareRow = {
@@ -46,6 +52,7 @@ export function buildAccessContext(
 	viewerId: string,
 	shares: readonly ShareRow[],
 	covered: readonly CoveredLocationRow[],
+	sharedOutfitIds: readonly string[] = [],
 ): AccessContext {
 	const wardrobes = new Map<string, ShareAccess>();
 	const sharedRoots = new Set<string>();
@@ -65,19 +72,32 @@ export function buildAccessContext(
 			) ?? row.access;
 		locations.set(row.id, { ownerId: row.ownerId, access });
 	}
-	return { viewerId, wardrobes, locations, sharedRoots };
+	return {
+		viewerId,
+		wardrobes,
+		locations,
+		sharedRoots,
+		outfits: new Set(sharedOutfitIds),
+	};
 }
 
 /** The caller's shares, expanded down the location tree. */
 export async function loadAccess(viewer: {
 	id: string;
 }): Promise<AccessContext> {
-	const shares = await db().share.findMany({
-		where: { granteeId: viewer.id },
-		select: { ownerId: true, access: true, locationId: true },
-	});
+	const [shares, outfitShares] = await Promise.all([
+		db().share.findMany({
+			where: { granteeId: viewer.id },
+			select: { ownerId: true, access: true, locationId: true },
+		}),
+		db().outfitShare.findMany({
+			where: { granteeId: viewer.id },
+			select: { outfitId: true },
+		}),
+	]);
+	const sharedOutfitIds = outfitShares.map((share) => share.outfitId);
 	if (shares.length === 0) {
-		return buildAccessContext(viewer.id, [], []);
+		return buildAccessContext(viewer.id, [], [], sharedOutfitIds);
 	}
 	// UNION (not ALL) drops repeats, so a cycle in the tree cannot loop forever.
 	const covered = shares.some((share) => share.locationId)
@@ -94,7 +114,7 @@ export async function loadAccess(viewer: {
 				SELECT id, owner_id AS "ownerId", access FROM tree
 			`
 		: [];
-	return buildAccessContext(viewer.id, shares, covered);
+	return buildAccessContext(viewer.id, shares, covered, sharedOutfitIds);
 }
 
 /** Access from ownership or a whole-wardrobe share alone. */
@@ -128,14 +148,36 @@ export function accessToItem(
 		: accessToWardrobe(ctx, item.ownerId);
 }
 
-/** A photo follows its item; an unassigned one its owner (the uploader). */
+/**
+ * Ownership or a whole-wardrobe share at its level; an outfit share gives
+ * view. Location shares do not reach outfits.
+ */
+export function accessToOutfit(
+	ctx: AccessContext,
+	outfit: { id: string; ownerId: string },
+): Access | null {
+	return strongest<Access>(
+		accessToWardrobe(ctx, outfit.ownerId),
+		ctx.outfits.has(outfit.id) ? "view" : null,
+	);
+}
+
+/**
+ * A photo follows its outfit or its item; an unassigned one its owner (the
+ * uploader). The cover photo of an item in a readable outfit is also readable
+ * (lib/outfits checks that: it needs a query).
+ */
 export function accessToPhoto(
 	ctx: AccessContext,
 	photo: {
 		ownerId: string;
 		item: { ownerId: string; locationId: string | null } | null;
+		outfit?: { id: string; ownerId: string } | null;
 	},
 ): Access | null {
+	if (photo.outfit) {
+		return accessToOutfit(ctx, photo.outfit);
+	}
 	return photo.item
 		? accessToItem(ctx, photo.item)
 		: accessToWardrobe(ctx, photo.ownerId);
@@ -179,6 +221,7 @@ export function requireEdit(access: Access | null, what: string): Access {
 
 const NO_ITEMS: Prisma.ItemWhereInput = { id: { in: [] } };
 const NO_LOCATIONS: Prisma.LocationWhereInput = { id: { in: [] } };
+const NO_OUTFITS: Prisma.OutfitWhereInput = { id: { in: [] } };
 
 function sharedLocationIds(ctx: AccessContext, ownerId: string): string[] {
 	return [...ctx.locations]
@@ -208,4 +251,20 @@ export function readableLocations(
 	}
 	const ids = sharedLocationIds(ctx, ownerId);
 	return ids.length > 0 ? { ownerId, id: { in: ids } } : NO_LOCATIONS;
+}
+
+/**
+ * Outfits in one owner's wardrobe the caller may read: all of them with
+ * wardrobe access, otherwise the ones shared with the caller directly.
+ */
+export function readableOutfits(
+	ctx: AccessContext,
+	ownerId: string = ctx.viewerId,
+): Prisma.OutfitWhereInput {
+	if (accessToWardrobe(ctx, ownerId)) {
+		return { ownerId };
+	}
+	return ctx.outfits.size > 0
+		? { ownerId, id: { in: [...ctx.outfits] } }
+		: NO_OUTFITS;
 }

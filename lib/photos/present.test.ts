@@ -9,6 +9,7 @@ describe("toPhotoDto", () => {
 				id: "p1",
 				ownerId: "u1",
 				itemId: null,
+				outfitId: null,
 				kind: "main",
 				status: "ready",
 				contentType: "image/jpeg",

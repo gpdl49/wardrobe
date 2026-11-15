@@ -21,6 +21,7 @@ const me = (isAdmin: boolean): MeDto => ({
 	username: "u",
 	groups: ["wardrobe"],
 	isAdmin,
+	features: { vision: false, suggestions: false, immich: false },
 });
 
 afterEach(cleanup);

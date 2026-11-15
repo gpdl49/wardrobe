@@ -17,6 +17,7 @@ const user = (id: string): MeDto => ({
 	username: id,
 	groups: ["wardrobe"],
 	isAdmin: false,
+	features: { vision: false, suggestions: false, immich: false },
 });
 
 function Probe() {
