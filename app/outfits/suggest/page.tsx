@@ -167,12 +167,37 @@ export default function SuggestPage() {
 				{runs.data
 					?.filter((r) => r.id !== runId)
 					.map((r) => (
-						<Run key={r.id} run={r} owner={owner} />
+						<PastRun key={r.id} run={r} owner={owner} />
 					))}
 			</section>
 		</main>
 	);
 }
+function PastRun({ run, owner }: { run: SuggestionRunDto; owner: string }) {
+	const pending = run.status === "queued" || run.status === "running";
+	return pending ? (
+		<PendingPastRun run={run} owner={owner} />
+	) : (
+		<Run run={run} owner={owner} />
+	);
+}
+
+function PendingPastRun({
+	run,
+	owner,
+}: {
+	run: SuggestionRunDto;
+	owner: string;
+}) {
+	const query = useSuggestionRun(run.id);
+	return (
+		<>
+			<Run run={query.data ?? run} owner={owner} />
+			<ErrorText error={query.error} />
+		</>
+	);
+}
+
 function Run({ run, owner }: { run: SuggestionRunDto; owner: string }) {
 	const actions = useSuggestionMutations();
 	return (
