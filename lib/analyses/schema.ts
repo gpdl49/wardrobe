@@ -67,3 +67,9 @@ export const applyAnalysisSchema = z.strictObject({
 		.transform((fields) => [...new Set(fields)]),
 });
 export type ApplyAnalysisInput = z.output<typeof applyAnalysisSchema>;
+
+export const bulkAnalysesSchema = z.strictObject({
+	ownerId: z.uuid().optional(),
+	itemIds: z.array(z.uuid()).optional(),
+});
+export type BulkAnalysesInput = z.output<typeof bulkAnalysesSchema>;

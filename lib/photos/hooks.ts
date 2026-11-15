@@ -7,5 +7,5 @@ import type { Photo } from "@/lib/generated/prisma/client";
  * logs and swallows errors from here, so keep it to enqueueing.
  */
 export async function onPhotoReady(photo: Photo): Promise<void> {
-	await enqueuePhotoAnalyses(photo);
+	if (photo.kind !== "outfit") await enqueuePhotoAnalyses(photo);
 }

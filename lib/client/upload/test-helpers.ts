@@ -37,6 +37,7 @@ export function photoDto(
 		ownerId: "owner-1",
 		access: "owner",
 		itemId: null,
+		outfitId: null,
 		kind: "main",
 		status: "pending",
 		contentType: "image/jpeg",

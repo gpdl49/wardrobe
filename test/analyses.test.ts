@@ -221,6 +221,16 @@ describeWithDb("analyses", () => {
 	});
 
 	describe("onPhotoReady", () => {
+		it("does not enqueue analyses for an outfit photo", async () => {
+			const outfit = await db().outfit.create({
+				data: { ownerId: await userId(), name: "Look" },
+			});
+			await onPhotoReady(
+				await makePhoto({ outfitId: outfit.id, kind: "outfit" }),
+			);
+			expect(enqueueMock).not.toHaveBeenCalled();
+			expect(await db().analysis.count()).toBe(0);
+		});
 		it("enqueues the photo's analyses", async () => {
 			const item = await makeItem();
 			await onPhotoReady(await makePhoto({ itemId: item.id }));
@@ -361,6 +371,37 @@ describeWithDb("analyses", () => {
 				tags: ["crew neck"],
 				labelText: "M\n100% wool",
 			});
+		});
+
+		it("sends the owner's fifty most used tags to vision as data", async () => {
+			const { item, vision } = await setUp();
+			const names = Array.from(
+				{ length: 51 },
+				(_, i) => `tag-${String(i).padStart(2, "0")}`,
+			);
+			await db().tag.createMany({
+				data: names.map((name) => ({ ownerId: item.ownerId, name })),
+			});
+			const tags = await db().tag.findMany({
+				where: { ownerId: item.ownerId },
+			});
+			await db().itemTag.createMany({
+				data: tags
+					.filter((t) => t.name !== "tag-00")
+					.map((t) => ({ itemId: item.id, tagId: t.id })),
+			});
+			const fetchMock = reply({ name: "Jumper" });
+			await runVisionAnalysis(vision.id, { fetch: fetchMock });
+			const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string);
+			const text = body.messages[1].content[0].text as string;
+			const vocabulary = JSON.parse(
+				text
+					.split("Existing tag vocabulary (JSON data): ")[1]
+					?.split("\n\n")[0] ?? "null",
+			);
+			expect(vocabulary).toHaveLength(50);
+			expect(vocabulary).not.toContain("tag-00");
+			expect(vocabulary).toContain("tag-50");
 		});
 
 		it("fails with the raw output on an unknown category", async () => {
@@ -699,5 +740,45 @@ describeWithDb("analyses", () => {
 			expect((await list(item.id)).status).toBe(200);
 			expect((await rerun(item.id)).status).toBe(403);
 		});
+	});
+});
+
+describeWithDb("bulk tagging", () => {
+	beforeEach(async () => {
+		await resetDb();
+		process.env.OPENROUTER_API_KEY = "test-key";
+		resetEnvCache();
+	});
+	afterEach(() => {
+		delete process.env.OPENROUTER_API_KEY;
+		resetEnvCache();
+	});
+	it("queues eligible items and applies only the newest done vision tags", async () => {
+		const { POST: queue } = await import("@/app/api/items/analyses/route");
+		const { POST: apply } = await import(
+			"@/app/api/items/analyses/apply-tags/route"
+		);
+		const item = await makeItem();
+		await makePhoto({ itemId: item.id });
+		const request = () =>
+			apiRequest("/api/items/analyses", { method: "POST", body: {} });
+		expect(await json(await queue(request(), undefined))).toEqual({
+			queued: 1,
+		});
+		expect(await json(await queue(request(), undefined))).toEqual({
+			queued: 0,
+		});
+		await db().analysis.updateMany({
+			where: { itemId: item.id },
+			data: { status: "done", result: { tags: ["formal"] } },
+		});
+		expect(await json(await apply(request(), undefined))).toEqual({
+			updated: 1,
+		});
+		const tags = await db().itemTag.findMany({
+			where: { itemId: item.id },
+			include: { tag: true },
+		});
+		expect(tags.map((t) => t.tag.name)).toEqual(["formal"]);
 	});
 });

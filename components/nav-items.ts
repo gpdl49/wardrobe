@@ -5,7 +5,9 @@ import {
 	MapPin,
 	PackageOpen,
 	QrCode,
+	Settings,
 	Shirt,
+	Sparkles,
 	Users,
 } from "lucide-react";
 
@@ -22,11 +24,13 @@ export type NavItem = {
 /** Pages from docs/wardrobe.md "Pages". */
 export const NAV_ITEMS: NavItem[] = [
 	{ href: "/", label: "Catalogue", icon: Shirt, primary: true },
+	{ href: "/outfits", label: "Outfits", icon: Sparkles, primary: true },
 	{ href: "/locations", label: "Locations", icon: MapPin, primary: true },
 	{ href: "/pack", label: "Pack", icon: Archive, primary: true },
 	{ href: "/unpack", label: "Unpack", icon: PackageOpen, primary: true },
 	{ href: "/sharing", label: "Sharing", icon: Users, primary: false },
 	{ href: "/admin/labels", label: "Labels", icon: QrCode, primary: false },
+	{ href: "/settings", label: "Settings", icon: Settings, primary: false },
 	{
 		href: "/admin/categories",
 		label: "Categories",

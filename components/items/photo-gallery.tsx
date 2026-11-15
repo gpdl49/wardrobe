@@ -11,6 +11,7 @@ const KIND_LABELS: Record<PhotoDto["kind"], string> = {
 	main: "Photo",
 	label: "Label",
 	detail: "Detail",
+	outfit: "Outfit",
 };
 
 /**

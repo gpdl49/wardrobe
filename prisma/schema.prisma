@@ -50,6 +50,8 @@ enum PhotoKind {
   main
   label
   detail
+  /// A photo of an outfit being worn (Photo.outfitId), not of one item.
+  outfit
 
   @@map("photo_kind")
 }
@@ -86,6 +88,22 @@ enum AnalysisStatus {
   @@map("analysis_status")
 }
 
+enum SuggestionStatus {
+  queued
+  running
+  done
+  failed
+
+  @@map("suggestion_status")
+}
+
+enum SuggestionFeedback {
+  saved
+  dismissed
+
+  @@map("suggestion_feedback")
+}
+
 enum ShareAccess {
   view
   edit
@@ -111,6 +129,13 @@ model User {
   sessions       PackingSession[]
   sharesOwned    Share[]          @relation("ShareOwner")
   sharesReceived Share[]          @relation("ShareGrantee")
+
+  outfits              Outfit[]
+  outfitSharesReceived OutfitShare[]
+  immichConnection     ImmichConnection?
+  immichAssetsLinked   OutfitImmichAsset[]
+  suggestionRunsOwned  SuggestionRun[]     @relation("SuggestionRunOwner")
+  suggestionRunsAsked  SuggestionRun[]     @relation("SuggestionRunRequester")
 
   @@index([email])
   @@index([username])
@@ -190,12 +215,13 @@ model Category {
 }
 
 model Tag {
-  id      String    @id @default(uuid(7)) @db.Uuid
-  ownerId String    @map("owner_id") @db.Uuid
-  owner   User      @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  id      String      @id @default(uuid(7)) @db.Uuid
+  ownerId String      @map("owner_id") @db.Uuid
+  owner   User        @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   /// Lower-case, unique per owner.
-  name    String    @db.VarChar(64)
+  name    String      @db.VarChar(64)
   items   ItemTag[]
+  outfits OutfitTag[]
 
   @@unique([ownerId, name])
   @@map("tags")
@@ -225,10 +251,11 @@ model Item {
   createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  photos    Photo[]    @relation("ItemPhotos")
+  photos    Photo[]      @relation("ItemPhotos")
   tags      ItemTag[]
   movements Movement[]
   analyses  Analysis[]
+  outfits   OutfitItem[]
 
   @@index([ownerId, createdAt, id])
   @@index([locationId])
@@ -254,7 +281,9 @@ model ItemTag {
 /// the API deletes the objects.
 ///
 /// An unassigned photo belongs to its uploader; assigning it to an item passes
-/// it to that item's owner.
+/// it to that item's owner. An outfit photo (kind `outfit`, `outfitId` set)
+/// belongs to the outfit's owner; a check constraint in the migration keeps a
+/// photo from having both an item and an outfit.
 model Photo {
   id          String      @id @default(uuid(7)) @db.Uuid
   ownerId     String      @map("owner_id") @db.Uuid
@@ -262,6 +291,8 @@ model Photo {
   /// Null while a packing capture is unassigned.
   itemId      String?     @map("item_id") @db.Uuid
   item        Item?       @relation("ItemPhotos", fields: [itemId], references: [id], onDelete: Cascade)
+  outfitId    String?     @map("outfit_id") @db.Uuid
+  outfit      Outfit?     @relation(fields: [outfitId], references: [id], onDelete: Cascade)
   kind        PhotoKind
   status      PhotoStatus @default(pending)
   contentType String      @map("content_type") @db.VarChar(100)
@@ -278,6 +309,7 @@ model Photo {
 
   @@index([ownerId])
   @@index([itemId])
+  @@index([outfitId])
   @@index([status])
   @@map("photos")
 }
@@ -336,6 +368,153 @@ model Analysis {
   @@index([itemId])
   @@index([photoId])
   @@map("analyses")
+}
+
+/// A saved set of items from one owner's wardrobe (docs/outfits/contract.md).
+/// Readable by the owner, whole-wardrobe grantees and OutfitShare grantees.
+model Outfit {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  ownerId   String   @map("owner_id") @db.Uuid
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  name      String   @db.VarChar(200)
+  notes     String?
+  seasons   Season[] @default([])
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  items        OutfitItem[]
+  tags         OutfitTag[]
+  /// Uploaded photos (kind `outfit`). The API deletes their objects.
+  photos       Photo[]
+  immichAssets OutfitImmichAsset[]
+  shares       OutfitShare[]
+  suggestion   OutfitSuggestion?
+
+  @@index([ownerId, createdAt, id])
+  @@map("outfits")
+}
+
+model OutfitItem {
+  outfitId String @map("outfit_id") @db.Uuid
+  outfit   Outfit @relation(fields: [outfitId], references: [id], onDelete: Cascade)
+  itemId   String @map("item_id") @db.Uuid
+  item     Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  /// Order within the outfit, ascending.
+  position Int    @default(0)
+
+  @@id([outfitId, itemId])
+  @@index([itemId])
+  @@map("outfit_items")
+}
+
+model OutfitTag {
+  outfitId String @map("outfit_id") @db.Uuid
+  outfit   Outfit @relation(fields: [outfitId], references: [id], onDelete: Cascade)
+  tagId    String @map("tag_id") @db.Uuid
+  tag      Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([outfitId, tagId])
+  @@index([tagId])
+  @@map("outfit_tags")
+}
+
+/// View access to one outfit for one user.
+model OutfitShare {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  outfitId  String   @map("outfit_id") @db.Uuid
+  outfit    Outfit   @relation(fields: [outfitId], references: [id], onDelete: Cascade)
+  granteeId String   @map("grantee_id") @db.Uuid
+  grantee   User     @relation(fields: [granteeId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([outfitId, granteeId])
+  @@index([granteeId])
+  @@map("outfit_shares")
+}
+
+/// An Immich asset linked to an outfit by reference. Bytes are streamed from
+/// Immich on demand with the linker's API key (ImmichConnection).
+model OutfitImmichAsset {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  outfitId   String    @map("outfit_id") @db.Uuid
+  outfit     Outfit    @relation(fields: [outfitId], references: [id], onDelete: Cascade)
+  linkedById String    @map("linked_by_id") @db.Uuid
+  linkedBy   User      @relation(fields: [linkedById], references: [id], onDelete: Cascade)
+  /// Immich asset id.
+  assetId    String    @map("asset_id") @db.Uuid
+  fileName   String?   @map("file_name") @db.VarChar(255)
+  width      Int?
+  height     Int?
+  /// Immich's thumbhash (base64), for a placeholder.
+  thumbhash  String?   @db.VarChar(100)
+  takenAt    DateTime? @map("taken_at") @db.Timestamptz
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([outfitId, assetId])
+  @@index([linkedById])
+  @@map("outfit_immich_assets")
+}
+
+/// A user's Immich API key, encrypted with SECRETS_KEY (lib/immich).
+model ImmichConnection {
+  userId       String   @id @map("user_id") @db.Uuid
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// `v1:<iv>:<tag>:<ciphertext>`, each part base64url (AES-256-GCM).
+  apiKey       String   @map("api_key")
+  immichUserId String   @map("immich_user_id") @db.VarChar(64)
+  immichEmail  String?  @map("immich_email") @db.VarChar(320)
+  immichName   String?  @map("immich_name") @db.VarChar(255)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("immich_connections")
+}
+
+/// One request for outfit suggestions and the model call that answers it.
+model SuggestionRun {
+  id            String           @id @default(uuid(7)) @db.Uuid
+  /// The wardrobe the outfits are suggested from.
+  ownerId       String           @map("owner_id") @db.Uuid
+  owner         User             @relation("SuggestionRunOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  requestedById String           @map("requested_by_id") @db.Uuid
+  requestedBy   User             @relation("SuggestionRunRequester", fields: [requestedById], references: [id], onDelete: Cascade)
+  status        SuggestionStatus @default(queued)
+  /// SuggestionRequest (lib/api/types.ts).
+  request       Json
+  /// OpenRouter model id.
+  model         String?          @db.VarChar(200)
+  error         String?
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  suggestions OutfitSuggestion[]
+
+  @@index([ownerId, createdAt])
+  @@map("suggestion_runs")
+}
+
+/// One proposed outfit. `feedback` records what the user did with it.
+model OutfitSuggestion {
+  id        String              @id @default(uuid(7)) @db.Uuid
+  runId     String              @map("run_id") @db.Uuid
+  run       SuggestionRun       @relation(fields: [runId], references: [id], onDelete: Cascade)
+  /// Same as the run's owner; kept here for lookups by owner.
+  ownerId   String              @map("owner_id") @db.Uuid
+  position  Int                 @default(0)
+  name      String              @db.VarChar(200)
+  rationale String?
+  /// Item ids; not a foreign key, so items deleted since are skipped on read.
+  itemIds   String[]            @map("item_ids") @db.Uuid
+  feedback  SuggestionFeedback?
+  /// The outfit this was saved as.
+  outfitId  String?             @unique @map("outfit_id") @db.Uuid
+  outfit    Outfit?             @relation(fields: [outfitId], references: [id], onDelete: SetNull)
+  createdAt DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([runId])
+  @@index([ownerId, feedback])
+  @@map("outfit_suggestions")
 }
 
 /// Idempotency-Key bookkeeping for POSTs (lib/http/idempotency). A row is
