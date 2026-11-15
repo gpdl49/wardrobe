@@ -51,7 +51,9 @@ final class SharingModel {
 				await appModel.refreshShares()
 			}
 		} catch {
-			errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+			errorMessage = appModel?.message(for: error)
+				?? (error as? LocalizedError)?.errorDescription
+				?? error.localizedDescription
 		}
 		isLoading = false
 	}
@@ -95,7 +97,7 @@ final class SharingModel {
 			return false
 		} catch {
 			isSubmitting = false
-			formError = error.localizedDescription
+			formError = appModel?.message(for: error) ?? error.localizedDescription
 			return false
 		}
 	}
@@ -113,7 +115,9 @@ final class SharingModel {
 				await appModel.refreshShares()
 			}
 		} catch {
-			errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+			errorMessage = appModel?.message(for: error)
+				?? (error as? LocalizedError)?.errorDescription
+				?? error.localizedDescription
 		}
 	}
 
@@ -136,7 +140,9 @@ final class SharingModel {
 				await appModel.refreshShares()
 			}
 		} catch {
-			errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+			errorMessage = appModel?.message(for: error)
+				?? (error as? LocalizedError)?.errorDescription
+				?? error.localizedDescription
 		}
 	}
 
