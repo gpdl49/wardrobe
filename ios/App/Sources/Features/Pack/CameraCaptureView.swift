@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import PhotosUI
 import SwiftUI
 import UIKit
@@ -101,8 +101,10 @@ final class CameraCaptureController: NSObject, ObservableObject {
 
 		return await withCheckedContinuation { continuation in
 			self.captureContinuation = continuation
-			let settings = AVCapturePhotoSettings()
-			let output = self.photoOutput
+			// AVCapturePhotoOutput is used on the session queue, as Apple's
+			// AVCam sample does; neither object is touched elsewhere meanwhile.
+			nonisolated(unsafe) let settings = AVCapturePhotoSettings()
+			nonisolated(unsafe) let output = self.photoOutput
 			self.sessionQueue.async {
 				output.capturePhoto(with: settings, delegate: self)
 			}

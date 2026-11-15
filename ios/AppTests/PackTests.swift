@@ -15,7 +15,10 @@ import WardrobeKitTesting
 
 	private func makeUploadQueue(api: any WardrobeAPI) -> UploadQueue {
 		let tempDir = URL.temporaryDirectory.appending(path: UUID().uuidString)
-		return UploadQueue(api: api, directory: tempDir)
+		let queue = UploadQueue(api: api, directory: tempDir)
+		// The real queue (WP3) only accepts captures once started for a user.
+		queue.start(userSub: userSub)
+		return queue
 	}
 
 	private func makeStore() -> ActiveSessionStore {
