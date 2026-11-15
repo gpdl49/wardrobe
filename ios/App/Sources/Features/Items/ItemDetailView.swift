@@ -557,3 +557,10 @@ struct ItemDetailView: View {
 		}
 	}
 }
+
+#Preview("Item detail") {
+	NavigationStack {
+		ItemDetailView(itemId: "30000000-0000-4000-8000-000000000001")
+	}
+	.environment(AppModel.preview())
+}

@@ -145,3 +145,8 @@ struct NewItemView: View {
 		}
 	}
 }
+
+#Preview("New item") {
+	NewItemView()
+		.environment(AppModel.preview())
+}

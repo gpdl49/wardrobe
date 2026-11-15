@@ -117,14 +117,8 @@ import WardrobeKitTesting
 		#expect(success == true)
 		#expect(vm.isDeleted == true)
 
-		do {
-			_ = try await api.item(id: testItemId)
-			Issue.record("Expected item to be deleted")
-		} catch let error as APIError {
-			#expect(error.status == 404)
-		} catch {
-			Issue.record("Unexpected error: \(error)")
-		}
+		let remaining = await api.items
+		#expect(!remaining.contains { $0.id == testItemId })
 	}
 
 	@Test func pollingStartsOnlyWhenPhotosProcessing() async {

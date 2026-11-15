@@ -169,6 +169,11 @@ public actor FixtureWardrobeAPI: WardrobeAPI {
 		case .null: items[i].location = nil
 		case .value(let l): items[i].location = locations.first { $0.id == l }?.ref
 		}
+		switch body.coverPhotoId {
+		case .unset: break
+		case .null: items[i].coverPhoto = nil
+		case .value(let photoId): items[i].coverPhoto = photos.first { $0.id == photoId }
+		}
 		return items[i]
 	}
 

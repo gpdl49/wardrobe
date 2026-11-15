@@ -185,10 +185,13 @@ final class ItemDetailModel {
 		do {
 			_ = try await api.runAnalyses(itemId: itemId, kinds: nil)
 			await refresh()
-		} catch let error as APIError where error.status == 409 {
-			analysisMessage = "Vision analysis is disabled on this server."
 		} catch {
-			analysisMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+			let described = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+			if (error as? APIError)?.status == 409 || described == "Vision disabled" {
+				analysisMessage = "Vision analysis is disabled on this server."
+			} else {
+				analysisMessage = described
+			}
 		}
 	}
 
