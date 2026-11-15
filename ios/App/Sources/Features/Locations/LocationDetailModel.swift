@@ -79,11 +79,12 @@ public final class LocationDetailModel {
 		do {
 			try await api.deleteLocation(id: locationId)
 			isDeleted = true
-		} catch let err as APIError where err.status == 409 {
-			errorMessage = "Still holds items"
-			throw err
 		} catch {
-			errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+			if APIErrorStatus.status(of: error) == 409 {
+				errorMessage = "Still holds items"
+			} else {
+				errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+			}
 			throw error
 		}
 	}

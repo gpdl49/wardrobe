@@ -27,8 +27,11 @@ import WardrobeKitTesting
 		let model = LocationDetailModel(api: api, locationId: closetId)
 		await model.load()
 
-		await #expect(throws: APIError.self) {
+		do {
 			try await model.delete()
+			Issue.record("Expected delete to throw")
+		} catch {
+			#expect(APIErrorStatus.status(of: error) == 409)
 		}
 
 		#expect(model.errorMessage == "Still holds items")

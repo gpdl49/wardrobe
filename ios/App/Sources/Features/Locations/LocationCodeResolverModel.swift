@@ -33,11 +33,13 @@ public final class LocationCodeResolverModel {
 		do {
 			let loc = try await api.location(code: code, owner: ownerId)
 			state = .resolved(loc)
-		} catch let error as APIError where error.status == 404 {
-			let isMine = (myId != nil && ownerId == myId)
-			state = .notFound(canCreate: isMine)
 		} catch {
-			state = .error((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+			if APIErrorStatus.status(of: error) == 404 {
+				let isMine = myId != nil && ownerId == myId
+				state = .notFound(canCreate: isMine)
+			} else {
+				state = .error((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+			}
 		}
 	}
 
