@@ -17,8 +17,12 @@ final class CameraCaptureController: NSObject, ObservableObject {
 	@Published var status: CameraStatus = .unconfigured
 	@Published var isCapturing = false
 
-	let session = AVCaptureSession()
-	private let photoOutput = AVCapturePhotoOutput()
+	/// Owned exclusively by `sessionQueue` (Apple's AVCapture threading model).
+	nonisolated(unsafe) private let captureSession = AVCaptureSession()
+	nonisolated private let sessionQueue = DispatchQueue(label: "xyz.vidur.wardrobe.camera.session")
+	nonisolated(unsafe) private let photoOutput = AVCapturePhotoOutput()
+
+	var session: AVCaptureSession { captureSession }
 	private var captureContinuation: CheckedContinuation<Data?, Never>?
 
 	override init() {
@@ -52,39 +56,41 @@ final class CameraCaptureController: NSObject, ObservableObject {
 	}
 
 	private func configureSession() {
-		session.beginConfiguration()
-		session.sessionPreset = .photo
+		sessionQueue.async { [weak self] in
+			guard let self else { return }
+			self.captureSession.beginConfiguration()
+			self.captureSession.sessionPreset = .photo
 
-		guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
-			let input = try? AVCaptureDeviceInput(device: device)
-		else {
-			session.commitConfiguration()
-			status = .unavailable
-			return
-		}
+			guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
+				let input = try? AVCaptureDeviceInput(device: device)
+			else {
+				self.captureSession.commitConfiguration()
+				Task { @MainActor in
+					self.status = .unavailable
+				}
+				return
+			}
 
-		if session.canAddInput(input) {
-			session.addInput(input)
-		}
+			if self.captureSession.canAddInput(input) {
+				self.captureSession.addInput(input)
+			}
 
-		if session.canAddOutput(photoOutput) {
-			session.addOutput(photoOutput)
-		}
+			if self.captureSession.canAddOutput(self.photoOutput) {
+				self.captureSession.addOutput(self.photoOutput)
+			}
 
-		session.commitConfiguration()
-		status = .ready
-
-		let backgroundQueue = DispatchQueue(label: "xyz.vidur.wardrobe.camera")
-		backgroundQueue.async { [weak self] in
-			self?.session.startRunning()
+			self.captureSession.commitConfiguration()
+			self.captureSession.startRunning()
+			Task { @MainActor in
+				self.status = .ready
+			}
 		}
 	}
 
 	func stopSession() {
-		guard session.isRunning else { return }
-		let backgroundQueue = DispatchQueue(label: "xyz.vidur.wardrobe.camera")
-		backgroundQueue.async { [weak self] in
-			self?.session.stopRunning()
+		sessionQueue.async { [weak self] in
+			guard let self, self.captureSession.isRunning else { return }
+			self.captureSession.stopRunning()
 		}
 	}
 
@@ -96,7 +102,10 @@ final class CameraCaptureController: NSObject, ObservableObject {
 		return await withCheckedContinuation { continuation in
 			self.captureContinuation = continuation
 			let settings = AVCapturePhotoSettings()
-			self.photoOutput.capturePhoto(with: settings, delegate: self)
+			let output = self.photoOutput
+			self.sessionQueue.async {
+				output.capturePhoto(with: settings, delegate: self)
+			}
 		}
 	}
 }
