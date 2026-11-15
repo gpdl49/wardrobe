@@ -133,8 +133,9 @@ writable.
 
 CI (`.github/workflows/ci.yaml`) lints, typechecks, tests against Postgres and
 builds on `ubuntu-latest`; on `main` it then builds and pushes
-`ghcr.io/gpdl49/wardrobe:main` and `:main-<sha>` with buildah on the
-`homestacks-runners` ARC runners. Flux image automation in homestacks rolls it
+`ghcr.io/gpdl49/wardrobe:main` and `:main-<sha>` with buildah, also on
+GitHub-hosted runners (the repo is public, so they're free; the self-hosted
+ARC runners serve private repos only). Flux image automation in homestacks rolls it
 out.
 
 ## iOS app

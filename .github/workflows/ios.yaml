@@ -209,3 +209,5 @@ jobs:
             ${{ runner.temp }}/Wardrobe.xcarchive
             ${{ runner.temp }}/Export
           if-no-files-found: ignore
+          # Artifacts of a public repo are downloadable by any signed-in user.
+          retention-days: 1

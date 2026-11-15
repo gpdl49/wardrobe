@@ -46,12 +46,13 @@ jobs:
 
   image:
     needs: version
-    runs-on: homestacks-runners
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-    # This runner sets ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER, so a job without a
-    # container: block is rejected before any step runs.
+    # GitHub-hosted: the repo is public, so its minutes are free, and the
+    # self-hosted runners must never serve a public repo (a fork PR could
+    # retarget them). buildah needs the privileged container.
     container:
       image: quay.io/buildah/stable@sha256:ef42cb6cbbe374d1f2d9c8c8e65610b2c21beb277562b6d99a4b632cb78faa70
       options: --privileged
