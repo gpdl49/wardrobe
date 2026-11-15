@@ -169,6 +169,15 @@ struct CameraCaptureView: View {
 			case .ready:
 				CameraPreviewView(session: controller.session)
 					.ignoresSafeArea()
+				VStack {
+					Spacer()
+					Button(action: takePhoto) {
+						Image(systemName: "circle.inset.filled").font(.system(size: 68)).foregroundStyle(.white)
+					}
+					.accessibilityLabel("Take photo")
+					.disabled(controller.isCapturing)
+					.padding(.bottom, 70)
+				}
 
 			case .unavailable, .unauthorized, .unconfigured:
 				fallbackView

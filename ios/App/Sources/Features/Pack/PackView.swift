@@ -10,6 +10,8 @@ struct PackView: View {
 	@Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
 	@State private var model: PackModel?
+	@State private var cropPhotos = false
+	@State private var pendingCrop: PendingPhoto?
 
 	var body: some View {
 		Group {
@@ -90,6 +92,12 @@ struct PackView: View {
 							model.addedExistingItems.append(item)
 						}
 					)
+				}
+				.sheet(item: $pendingCrop) { photo in
+					PhotoCropView(data: photo.data) { data in
+						if photo.isLabel { model.captureLabelPhoto(data: data) }
+						else { model.capturePhoto(data: data) }
+					}
 				}
 				.errorAlert(Bindable(model).errorMessage)
 
@@ -233,6 +241,9 @@ struct PackView: View {
 
 			ToolbarItem(placement: .topBarTrailing) {
 				HStack(spacing: 8) {
+					Toggle(isOn: $cropPhotos) { Label("Crop photos", systemImage: "crop") }.toggleStyle(.button)
+						.labelStyle(.iconOnly)
+						.accessibilityHint("Choose whether to crop each photo before upload")
 					Button {
 						model.showExistingItemSearch = true
 					} label: {
@@ -267,7 +278,7 @@ struct PackView: View {
 		VStack(spacing: 0) {
 			// Camera viewport
 			CameraCaptureView { photoData in
-				model.capturePhoto(data: photoData)
+				acceptPhoto(photoData, model: model)
 			}
 			.frame(maxHeight: .infinity)
 			.clipped()
@@ -307,7 +318,7 @@ struct PackView: View {
 							guard let item else { return }
 							Task {
 								if let data = try? await item.loadTransferable(type: Data.self) {
-									model.capturePhoto(data: data)
+									acceptPhoto(data, model: model)
 								}
 							}
 						}
@@ -326,7 +337,7 @@ struct PackView: View {
 							guard let item else { return }
 							Task {
 								if let data = try? await item.loadTransferable(type: Data.self) {
-									model.captureLabelPhoto(data: data)
+									acceptPhoto(data, model: model, isLabel: true)
 								}
 							}
 						}
@@ -357,7 +368,7 @@ struct PackView: View {
 			// Left side: camera viewport
 			ZStack(alignment: .bottom) {
 				CameraCaptureView { photoData in
-					model.capturePhoto(data: photoData)
+					acceptPhoto(photoData, model: model)
 				}
 				.frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -377,7 +388,7 @@ struct PackView: View {
 							guard let item else { return }
 							Task {
 								if let data = try? await item.loadTransferable(type: Data.self) {
-									model.capturePhoto(data: data)
+									acceptPhoto(data, model: model)
 								}
 							}
 						}
@@ -447,6 +458,12 @@ struct PackView: View {
 			.frame(width: 360)
 			.background(Color(.systemGroupedBackground))
 		}
+	}
+
+	private func acceptPhoto(_ data: Data, model: PackModel, isLabel: Bool = false) {
+		if cropPhotos { pendingCrop = PendingPhoto(data: data, isLabel: isLabel) }
+		else if isLabel { model.captureLabelPhoto(data: data) }
+		else { model.capturePhoto(data: data) }
 	}
 
 	// MARK: - Reusable Capture Components
@@ -546,4 +563,10 @@ struct PackView: View {
 			.environment(model.uploads)
 			.environment(model.router)
 	}
+}
+
+private struct PendingPhoto: Identifiable {
+	let id = UUID()
+	let data: Data
+	let isLabel: Bool
 }
