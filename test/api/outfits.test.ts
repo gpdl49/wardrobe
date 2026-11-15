@@ -1,5 +1,9 @@
-import { beforeEach, expect, it } from "vitest";
-import { GET as get, PATCH as patch } from "@/app/api/outfits/[id]/route";
+import { beforeEach, expect, it, vi } from "vitest";
+import {
+	GET as get,
+	PATCH as patch,
+	DELETE as remove,
+} from "@/app/api/outfits/[id]/route";
 import { POST as shareRoute } from "@/app/api/outfits/[id]/shares/route";
 import { POST as create, GET as list } from "@/app/api/outfits/route";
 import { db } from "@/lib/db";
@@ -7,6 +11,7 @@ import { describeWithDb, resetDb } from "@/test/helpers/db";
 import { makeItem, makeLocation } from "@/test/helpers/fixtures";
 import { apiRequest, json, routeParams, TEST_USER } from "@/test/helpers/http";
 import { makeOutfit, shareOutfit } from "@/test/helpers/outfits";
+import { installFakeS3 } from "@/test/helpers/s3";
 import { OTHER_USER, share, THIRD_USER, userId } from "@/test/helpers/users";
 
 describeWithDb("outfits API", () => {
@@ -165,5 +170,56 @@ describeWithDb("outfits API", () => {
 		expect(detail.photos[0]?.urls.thumb).toContain(
 			`/api/outfits/${first.id}/immich-assets/`,
 		);
+	});
+	it("does not replay a created outfit after wardrobe access is revoked", async () => {
+		const ownerId = await userId();
+		const grant = await share(TEST_USER, OTHER_USER, "edit");
+		const request = () =>
+			apiRequest("/api/outfits", {
+				method: "POST",
+				user: OTHER_USER,
+				headers: { "Idempotency-Key": "revoked-outfit" },
+				body: { name: "Private", ownerId },
+			});
+		expect((await create(request(), {})).status).toBe(201);
+		await db().share.delete({ where: { id: grant.id } });
+		expect((await create(request(), {})).status).toBe(404);
+	});
+	it("keeps the outfit and photos when object deletion fails so deletion can be retried", async () => {
+		const outfit = await makeOutfit();
+		const photo = await db().photo.create({
+			data: {
+				ownerId: outfit.ownerId,
+				outfitId: outfit.id,
+				kind: "outfit",
+				status: "ready",
+				contentType: "image/jpeg",
+				size: 1,
+			},
+		});
+		const s3 = installFakeS3();
+		vi.spyOn(s3.client, "send").mockRejectedValueOnce(
+			new Error("storage unavailable") as never,
+		);
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		try {
+			expect(
+				(
+					await remove(
+						apiRequest("/", { method: "DELETE" }),
+						routeParams({ id: outfit.id }),
+					)
+				).status,
+			).toBe(500);
+			expect(
+				await db().photo.findUnique({ where: { id: photo.id } }),
+			).not.toBeNull();
+			expect(
+				await db().outfit.findUnique({ where: { id: outfit.id } }),
+			).not.toBeNull();
+		} finally {
+			s3.restore();
+			vi.restoreAllMocks();
+		}
 	});
 });

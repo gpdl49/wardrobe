@@ -41,6 +41,16 @@ export async function getRun(viewer: Viewer, id: string) {
 	requireRead(accessToWardrobe(ctx, row.ownerId), "Wardrobe");
 	return presentRun(row, ctx);
 }
+export async function requireRunEdit(viewer: Viewer, id: string) {
+	const row = await db().suggestionRun.findUnique({
+		where: { id: validId(id) },
+	});
+	if (!row) throw notFound("Suggestion run not found");
+	requireEdit(
+		accessToWardrobe(await loadAccess(viewer), row.ownerId),
+		"Wardrobe",
+	);
+}
 export async function createRun(
 	viewer: Viewer,
 	input: CreateSuggestionRunInput,
