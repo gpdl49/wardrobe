@@ -85,10 +85,10 @@ targets:
     platform: iOS
     sources:
       - path: AppTests
+    # WardrobeKit and WardrobeKitTesting come from the host app (BUNDLE_LOADER);
+    # linking them here again loads every class twice and breaks `as?` casts.
     dependencies:
       - target: Wardrobe
-      - package: WardrobeKit
-        product: WardrobeKitTesting
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

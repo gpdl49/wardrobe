@@ -24,7 +24,9 @@ import WardrobeKitTesting
 
 	@Test func createWithPhotoEnqueuesUpload() async {
 		let api = FixtureWardrobeAPI()
-		let queue = UploadQueue(api: api, directory: URL.temporaryDirectory)
+		let queue = UploadQueue(api: api, directory: URL.temporaryDirectory.appending(path: UUID().uuidString))
+		// The real queue (WP3) only accepts captures once started for a user.
+		queue.start(userSub: "test-sub")
 		let model = NewItemModel()
 		model.name = "Denim Jacket"
 		model.capturedPhotoData = Data([0xFF, 0xD8, 0xFF, 0xE0]) // fake jpeg
