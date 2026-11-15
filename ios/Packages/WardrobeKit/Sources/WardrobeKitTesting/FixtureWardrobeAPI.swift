@@ -13,6 +13,8 @@ public actor FixtureWardrobeAPI: WardrobeAPI {
 	public var locations: [LocationDTO]
 	public var categories: [CategoryDTO]
 	public var items: [ItemSummaryDTO]
+	public var sharesList: [ShareDTO] = []
+	public var sharedWithMeList: [SharedWithMeDTO] = []
 	/// Calls made, as "METHOD path", for assertions.
 	public private(set) var calls: [String] = []
 	/// When set, the next call throws it.
@@ -198,9 +200,43 @@ public actor FixtureWardrobeAPI: WardrobeAPI {
 	public func session(id: ID) async throws -> PackingSessionDetailDTO { try record("GET /sessions/\(id)"); throw Self.unimplemented("session") }
 	public func endSession(id: ID) async throws -> PackingSessionDTO { try record("POST /sessions/\(id)/end"); throw Self.unimplemented("endSession") }
 
-	public func shares() async throws -> [ShareDTO] { try record("GET /shares"); return [] }
-	public func createShare(_ body: CreateShareRequest) async throws -> ShareDTO { try record("POST /shares"); throw Self.unimplemented("createShare") }
-	public func updateShare(id: ID, access: ShareAccess) async throws -> ShareDTO { try record("PATCH /shares/\(id)"); throw Self.unimplemented("updateShare") }
-	public func deleteShare(id: ID) async throws { try record("DELETE /shares/\(id)") }
-	public func sharedWithMe() async throws -> [SharedWithMeDTO] { try record("GET /shared-with-me"); return [] }
+	public func shares() async throws -> [ShareDTO] { try record("GET /shares"); return sharesList }
+	public func createShare(_ body: CreateShareRequest) async throws -> ShareDTO {
+		try record("POST /shares")
+		let share = ShareDTO(
+			id: UUID().uuidString.lowercased(),
+			ownerId: me.id,
+			grantee: UserRef(id: Self.friendID, email: body.grantee.contains("@") ? body.grantee : nil, username: body.grantee.contains("@") ? nil : body.grantee),
+			access: body.access,
+			location: body.locationId.flatMap { locId in locations.first { $0.id == locId }?.ref },
+			createdAt: now,
+			updatedAt: now
+		)
+		sharesList.append(share)
+		return share
+	}
+	public func updateShare(id: ID, access: ShareAccess) async throws -> ShareDTO {
+		try record("PATCH /shares/\(id)")
+		if let idx = sharesList.firstIndex(where: { $0.id == id }) {
+			sharesList[idx].access = access
+			sharesList[idx].updatedAt = now
+			return sharesList[idx]
+		}
+		let share = ShareDTO(
+			id: id,
+			ownerId: me.id,
+			grantee: UserRef(id: Self.friendID, email: "friend@example.com", username: "friend"),
+			access: access,
+			location: nil,
+			createdAt: now,
+			updatedAt: now
+		)
+		sharesList.append(share)
+		return share
+	}
+	public func deleteShare(id: ID) async throws {
+		try record("DELETE /shares/\(id)")
+		sharesList.removeAll { $0.id == id }
+	}
+	public func sharedWithMe() async throws -> [SharedWithMeDTO] { try record("GET /shared-with-me"); return sharedWithMeList }
 }
