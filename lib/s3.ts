@@ -141,12 +141,17 @@ export async function putObject(
 export async function deleteObjects(keys: string[]): Promise<void> {
 	for (let i = 0; i < keys.length; i += 1000) {
 		const batch = keys.slice(i, i + 1000);
-		await s3().send(
+		const result = await s3().send(
 			new DeleteObjectsCommand({
 				Bucket: env().PHOTO_BUCKET,
 				Delete: { Objects: batch.map((Key) => ({ Key })), Quiet: true },
 			}),
 		);
+		if (result.Errors?.length) {
+			throw new Error(
+				`Object deletion failed for ${result.Errors.length} object(s)`,
+			);
+		}
 	}
 }
 

@@ -1,5 +1,9 @@
-import { beforeEach, expect, it } from "vitest";
-import { GET as get, PATCH as patch } from "@/app/api/outfits/[id]/route";
+import { beforeEach, expect, it, vi } from "vitest";
+import {
+	GET as get,
+	PATCH as patch,
+	DELETE as remove,
+} from "@/app/api/outfits/[id]/route";
 import { POST as shareRoute } from "@/app/api/outfits/[id]/shares/route";
 import { POST as create, GET as list } from "@/app/api/outfits/route";
 import { db } from "@/lib/db";
@@ -7,6 +11,7 @@ import { describeWithDb, resetDb } from "@/test/helpers/db";
 import { makeItem, makeLocation } from "@/test/helpers/fixtures";
 import { apiRequest, json, routeParams, TEST_USER } from "@/test/helpers/http";
 import { makeOutfit, shareOutfit } from "@/test/helpers/outfits";
+import { installFakeS3 } from "@/test/helpers/s3";
 import { OTHER_USER, share, THIRD_USER, userId } from "@/test/helpers/users";
 
 describeWithDb("outfits API", () => {
@@ -165,5 +170,214 @@ describeWithDb("outfits API", () => {
 		expect(detail.photos[0]?.urls.thumb).toContain(
 			`/api/outfits/${first.id}/immich-assets/`,
 		);
+	});
+	it("does not replay a created outfit after wardrobe access is revoked", async () => {
+		const ownerId = await userId();
+		const grant = await share(TEST_USER, OTHER_USER, "edit");
+		const request = () =>
+			apiRequest("/api/outfits", {
+				method: "POST",
+				user: OTHER_USER,
+				headers: { "Idempotency-Key": "revoked-outfit" },
+				body: { name: "Private", ownerId },
+			});
+		expect((await create(request(), {})).status).toBe(201);
+		await db().share.delete({ where: { id: grant.id } });
+		expect((await create(request(), {})).status).toBe(404);
+	});
+	it("keeps the outfit and photos when object deletion fails so deletion can be retried", async () => {
+		const outfit = await makeOutfit();
+		const photo = await db().photo.create({
+			data: {
+				ownerId: outfit.ownerId,
+				outfitId: outfit.id,
+				kind: "outfit",
+				status: "ready",
+				contentType: "image/jpeg",
+				size: 1,
+			},
+		});
+		const s3 = installFakeS3();
+		vi.spyOn(s3.client, "send").mockRejectedValueOnce(
+			new Error("storage unavailable") as never,
+		);
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		try {
+			expect(
+				(
+					await remove(
+						apiRequest("/", { method: "DELETE" }),
+						routeParams({ id: outfit.id }),
+					)
+				).status,
+			).toBe(500);
+			expect(
+				await db().photo.findUnique({ where: { id: photo.id } }),
+			).not.toBeNull();
+			expect(
+				await db().outfit.findUnique({ where: { id: outfit.id } }),
+			).not.toBeNull();
+		} finally {
+			s3.restore();
+			vi.restoreAllMocks();
+		}
+	});
+	it("deletes uploaded photo objects and Immich links with the outfit", async () => {
+		const outfit = await makeOutfit();
+		const photo = await db().photo.create({
+			data: {
+				ownerId: outfit.ownerId,
+				outfitId: outfit.id,
+				kind: "outfit",
+				status: "ready",
+				contentType: "image/jpeg",
+				size: 1,
+			},
+		});
+		await db().outfitImmichAsset.create({
+			data: {
+				outfitId: outfit.id,
+				linkedById: outfit.ownerId,
+				assetId: crypto.randomUUID(),
+			},
+		});
+		const s3 = installFakeS3();
+		try {
+			for (const key of [
+				`photos/${photo.id}/original`,
+				`photos/${photo.id}/thumb.webp`,
+				`photos/${photo.id}/display.webp`,
+			])
+				s3.upload(key, new Uint8Array([1]));
+			expect(
+				(
+					await remove(
+						apiRequest("/", { method: "DELETE" }),
+						routeParams({ id: outfit.id }),
+					)
+				).status,
+			).toBe(204);
+			expect(s3.objects.size).toBe(0);
+			expect(await db().photo.count()).toBe(0);
+			expect(await db().outfitImmichAsset.count()).toBe(0);
+		} finally {
+			s3.restore();
+		}
+	});
+	it("validates outfit items and replaces their order", async () => {
+		const items = await Promise.all([makeItem(), makeItem()]);
+		const ids = items.map((item) => item.id);
+		const request = (body: unknown) =>
+			apiRequest("/api/outfits", { method: "POST", body });
+		expect(
+			(await create(request({ name: "x", itemIds: [ids[0], ids[0]] }), {}))
+				.status,
+		).toBe(400);
+		expect(
+			(
+				await create(
+					request({
+						name: "x",
+						itemIds: Array.from({ length: 51 }, () => crypto.randomUUID()),
+					}),
+					{},
+				)
+			).status,
+		).toBe(400);
+		const result = await json<{ id: string }>(
+			await create(request({ name: "x", itemIds: ids }), {}),
+		);
+		const updated = await json<{ items: { id: string }[] }>(
+			await patch(
+				apiRequest("/", {
+					method: "PATCH",
+					body: { itemIds: ids.toReversed() },
+				}),
+				routeParams({ id: result.id }),
+			),
+		);
+		expect(updated.items.map((item) => item.id)).toEqual(ids.toReversed());
+	});
+	it("validates share recipients and duplicate shares", async () => {
+		const outfit = await makeOutfit();
+		await userId(OTHER_USER);
+		const post = (grantee: string) =>
+			shareRoute(
+				apiRequest("/", { method: "POST", body: { grantee } }),
+				routeParams({ id: outfit.id }),
+			);
+		expect((await post("not-a-user")).status).toBe(422);
+		expect((await post(TEST_USER.email as string)).status).toBe(422);
+		expect((await post(OTHER_USER.username as string)).status).toBe(201);
+		expect((await post(OTHER_USER.email as string)).status).toBe(409);
+	});
+	it("filters, paginates and chooses the first ready upload as cover", async () => {
+		const item = await makeItem();
+		const request = (body: unknown) =>
+			apiRequest("/api/outfits", { method: "POST", body });
+		const old = await json<{ id: string }>(
+			await create(
+				request({
+					name: "Summer look",
+					seasons: ["summer"],
+					tags: ["formal"],
+					itemIds: [item.id],
+				}),
+				{},
+			),
+		);
+		const newer = await json<{ id: string }>(
+			await create(request({ name: "Winter look", seasons: ["winter"] }), {}),
+		);
+		await db().outfit.update({
+			where: { id: old.id },
+			data: { createdAt: new Date("2020-01-01T00:00:00Z") },
+		});
+		const photo = await db().photo.create({
+			data: {
+				ownerId: await userId(),
+				outfitId: old.id,
+				kind: "outfit",
+				status: "ready",
+				contentType: "image/jpeg",
+				size: 1,
+			},
+		});
+		await db().outfitImmichAsset.create({
+			data: {
+				outfitId: old.id,
+				linkedById: await userId(),
+				assetId: crypto.randomUUID(),
+			},
+		});
+		const filtered = await json<{
+			outfits: { id: string; cover: { id: string }; previewItems: unknown[] }[];
+		}>(
+			await list(
+				apiRequest(
+					`/api/outfits?q=Summer&tag=formal&season=summer&item=${item.id}`,
+				),
+				{},
+			),
+		);
+		expect(filtered.outfits).toHaveLength(1);
+		expect(filtered.outfits[0]).toMatchObject({
+			id: old.id,
+			cover: { id: photo.id },
+			previewItems: [{ id: item.id }],
+		});
+		const page = await json<{ outfits: { id: string }[]; nextCursor: string }>(
+			await list(apiRequest("/api/outfits?limit=1"), {}),
+		);
+		expect(page.outfits[0]?.id).toBe(newer.id);
+		const next = await json<{ outfits: { id: string }[] }>(
+			await list(
+				apiRequest(
+					`/api/outfits?limit=1&cursor=${encodeURIComponent(page.nextCursor)}`,
+				),
+				{},
+			),
+		);
+		expect(next.outfits[0]?.id).toBe(old.id);
 	});
 });

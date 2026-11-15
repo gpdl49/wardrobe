@@ -50,6 +50,11 @@ export async function getOutfit(viewer: Viewer, id: string) {
 	const ctx = await loadAccess(viewer);
 	return presentOutfit(await getRow(id, ctx), ctx);
 }
+export async function requireOutfitEdit(viewer: Viewer, id: string) {
+	const ctx = await loadAccess(viewer);
+	const row = await getRow(id, ctx);
+	requireEdit(accessToOutfit(ctx, row), "Outfit");
+}
 export async function listOutfits(viewer: Viewer, q: ListOutfitsQuery) {
 	const ctx = await loadAccess(viewer);
 	const and: Prisma.OutfitWhereInput[] = [
@@ -212,12 +217,8 @@ export async function deleteOutfit(viewer: Viewer, id: string) {
 	const ctx = await loadAccess(viewer);
 	const row = await getRow(id, ctx);
 	requireEdit(accessToOutfit(ctx, row), "Outfit");
+	await deleteObjects(row.photos.flatMap((p) => allPhotoKeys(p.id)));
 	await db().outfit.delete({ where: { id: row.id } });
-	try {
-		await deleteObjects(row.photos.flatMap((p) => allPhotoKeys(p.id)));
-	} catch (e) {
-		console.error("Outfit photo object deletion failed", e);
-	}
 }
 async function ownerOutfit(viewer: Viewer, id: string) {
 	const ctx = await loadAccess(viewer);

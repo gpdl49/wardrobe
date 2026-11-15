@@ -18,11 +18,11 @@ export type TasteExample = {
 	tags: readonly string[];
 };
 
-// GPT-4.1 Nano supports structured outputs at $0.10/M input and $0.40/M
-// output tokens (https://openrouter.ai/openai/gpt-4.1-nano). At 40k input
-// and 2k output tokens a large run costs about $0.0048, within the shared
-// $5/month budget. OPENROUTER_TEXT_MODEL can override it.
-export const DEFAULT_TEXT_MODEL = "openai/gpt-4.1-nano";
+// GPT-5.6 Luna supports structured outputs at $0.20/M input and $1.20/M
+// output (https://openrouter.ai/openai/gpt-5.6-luna). A 40k-input, 2k-output
+// run costs about $0.0104 before cache charges. This is a quality judgement,
+// not a measured taste benchmark; OPENROUTER_TEXT_MODEL can override it.
+export const DEFAULT_TEXT_MODEL = "openai/gpt-5.6-luna";
 export const SUGGESTION_SCHEMA_NAME = "outfit_suggestions";
 export const suggestionJsonSchema = {
 	type: "object",

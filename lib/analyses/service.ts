@@ -226,8 +226,12 @@ async function bulkItems(
 	const ctx = await loadAccess(viewer);
 	const items = await db().item.findMany({
 		where: {
-			ownerId: input.ownerId ?? viewer.id,
-			...(input.itemIds ? { id: { in: input.itemIds } } : {}),
+			...(input.itemIds
+				? {
+						id: { in: input.itemIds },
+						...(input.ownerId ? { ownerId: input.ownerId } : {}),
+					}
+				: { ownerId: input.ownerId ?? viewer.id }),
 		},
 		orderBy: [{ createdAt: "desc" }, { id: "desc" }],
 	});
