@@ -213,3 +213,5 @@ notes. Create outfit and suggestion-run calls require an idempotency key.
 Outfit photo uploads use `CreatePhotoRequest(outfitId:kind:contentType:size:)`
 and the upload queue's `.outfit(id)` target. Existing photo requests continue
 to use the item target and presigned URL flow.
+
+Item responses include `nameGenerated` (boolean). Photo analysis automatically fills null names; clients render those names at 60% opacity. Explicit name updates or accepting a name suggestion clear the flag. Missing flags from older servers are treated as false.

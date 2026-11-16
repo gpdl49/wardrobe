@@ -61,7 +61,12 @@ export function ItemCard({
 			/>
 			<div className="flex min-w-0 flex-col gap-0.5 p-2.5">
 				<div className="flex items-center justify-between gap-2">
-					<span className="truncate text-sm font-medium">{title}</span>
+					<span
+						style={{ opacity: item.nameGenerated ? 0.6 : 1 }}
+						className="truncate text-sm font-medium"
+					>
+						{title}
+					</span>
 					<ColorDots colors={item.colors} max={3} />
 				</div>
 				<span className="flex items-center gap-1 truncate text-xs text-muted">
@@ -94,7 +99,12 @@ export function ItemRow({ item }: { item: ItemSummaryDto }) {
 				className="size-14 shrink-0 rounded-lg"
 			/>
 			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-				<span className="truncate font-medium">{title}</span>
+				<span
+					style={{ opacity: item.nameGenerated ? 0.6 : 1 }}
+					className="truncate font-medium"
+				>
+					{title}
+				</span>
 				<span className="truncate text-sm text-muted">
 					{[item.category?.name, item.brand, item.size]
 						.filter(Boolean)
@@ -109,7 +119,10 @@ export function ItemRow({ item }: { item: ItemSummaryDto }) {
 			<ColorDots colors={item.colors} className="hidden sm:flex" />
 			<div className="flex w-24 shrink-0 flex-col items-end gap-1 text-right">
 				{item.location ? (
-					<span className="truncate text-sm font-medium">
+					<span
+						style={{ opacity: item.nameGenerated ? 0.6 : 1 }}
+						className="truncate text-sm font-medium"
+					>
 						{item.location.code}
 					</span>
 				) : (

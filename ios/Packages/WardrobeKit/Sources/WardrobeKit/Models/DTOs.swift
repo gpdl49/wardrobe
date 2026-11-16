@@ -168,6 +168,7 @@ public struct ItemSummaryDTO: Codable, Hashable, Sendable, Identifiable {
 	public var ownerId: ID
 	public var access: Access
 	public var name: String?
+	public var nameGenerated: Bool?
 	public var category: CategoryRef?
 	public var brand: String?
 	public var size: String?
@@ -184,7 +185,7 @@ public struct ItemSummaryDTO: Codable, Hashable, Sendable, Identifiable {
 	public var updatedAt: Date
 
 	public init(
-		id: ID, ownerId: ID, access: Access, name: String? = nil,
+		id: ID, ownerId: ID, access: Access, name: String? = nil, nameGenerated: Bool? = nil,
 		category: CategoryRef? = nil, brand: String? = nil, size: String? = nil,
 		colors: [ItemColor] = [], pattern: String? = nil, material: String? = nil,
 		seasons: [Season] = [], status: ItemStatus = .active,
@@ -192,7 +193,7 @@ public struct ItemSummaryDTO: Codable, Hashable, Sendable, Identifiable {
 		coverPhoto: PhotoDTO? = nil, createdAt: Date, updatedAt: Date
 	) {
 		self.id = id; self.ownerId = ownerId; self.access = access
-		self.name = name; self.category = category; self.brand = brand
+		self.nameGenerated = nameGenerated; self.name = name; self.category = category; self.brand = brand
 		self.size = size; self.colors = colors; self.pattern = pattern
 		self.material = material; self.seasons = seasons; self.status = status
 		self.location = location; self.notes = notes; self.tags = tags
@@ -283,6 +284,7 @@ public struct ItemDetailDTO: Codable, Hashable, Sendable, Identifiable {
 	public var ownerId: ID
 	public var access: Access
 	public var name: String?
+	public var nameGenerated: Bool?
 	public var category: CategoryRef?
 	public var brand: String?
 	public var size: String?
@@ -303,17 +305,17 @@ public struct ItemDetailDTO: Codable, Hashable, Sendable, Identifiable {
 
 	public var summary: ItemSummaryDTO {
 		ItemSummaryDTO(
-			id: id, ownerId: ownerId, access: access, name: name, category: category,
+			id: id, ownerId: ownerId, access: access, name: name, nameGenerated: nameGenerated, category: category,
 			brand: brand, size: size, colors: colors, pattern: pattern,
 			material: material, seasons: seasons, status: status, location: location,
 			notes: notes, tags: tags, coverPhoto: coverPhoto, createdAt: createdAt,
 			updatedAt: updatedAt)
 	}
-	public init(id: ID, ownerId: ID, access: Access, name: String? = nil, category: CategoryRef? = nil, brand: String? = nil, size: String? = nil, colors: [ItemColor], pattern: String? = nil, material: String? = nil, seasons: [Season], status: ItemStatus, location: LocationRef? = nil, notes: String? = nil, tags: [String], coverPhoto: PhotoDTO? = nil, createdAt: Date, updatedAt: Date, photos: [PhotoDTO], movements: [MovementDTO], analyses: [AnalysisDTO]) {
+	public init(id: ID, ownerId: ID, access: Access, name: String? = nil, nameGenerated: Bool? = nil, category: CategoryRef? = nil, brand: String? = nil, size: String? = nil, colors: [ItemColor], pattern: String? = nil, material: String? = nil, seasons: [Season], status: ItemStatus, location: LocationRef? = nil, notes: String? = nil, tags: [String], coverPhoto: PhotoDTO? = nil, createdAt: Date, updatedAt: Date, photos: [PhotoDTO], movements: [MovementDTO], analyses: [AnalysisDTO]) {
 		self.id = id
 		self.ownerId = ownerId
 		self.access = access
-		self.name = name
+		self.nameGenerated = nameGenerated; self.name = name
 		self.category = category
 		self.brand = brand
 		self.size = size

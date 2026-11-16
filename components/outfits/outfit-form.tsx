@@ -143,12 +143,16 @@ function OutfitForm({
 								alt=""
 								className="size-12 shrink-0 rounded-lg"
 							/>
-							<span className="flex-1">{itemTitle(item)}</span>
+							<span className="flex-1">
+								<span style={{ opacity: item.nameGenerated ? 0.6 : 1 }}>
+									{itemTitle(item)}
+								</span>
+							</span>
 							<Button
 								type="button"
 								disabled={i === 0}
 								onClick={() => move(i, -1)}
-								aria-label={`Move ${itemTitle(item)} up`}
+								aria-label={`Move $<span style={{ opacity: item.nameGenerated ? 0.6 : 1 }}>{itemTitle(item)}</span> up`}
 							>
 								↑
 							</Button>
@@ -156,7 +160,7 @@ function OutfitForm({
 								type="button"
 								disabled={i === chosen.length - 1}
 								onClick={() => move(i, 1)}
-								aria-label={`Move ${itemTitle(item)} down`}
+								aria-label={`Move $<span style={{ opacity: item.nameGenerated ? 0.6 : 1 }}>{itemTitle(item)}</span> down`}
 							>
 								↓
 							</Button>
@@ -216,7 +220,11 @@ function OutfitForm({
 									alt=""
 									className="size-12 shrink-0 rounded-lg"
 								/>
-								<span className="flex-1">{itemTitle(item)}</span>
+								<span className="flex-1">
+									<span style={{ opacity: item.nameGenerated ? 0.6 : 1 }}>
+										{itemTitle(item)}
+									</span>
+								</span>
 								<Button
 									type="button"
 									disabled={

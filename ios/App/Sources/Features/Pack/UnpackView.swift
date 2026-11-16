@@ -300,7 +300,7 @@ struct UnpackView: View {
 				)
 				.clipShape(RoundedRectangle(cornerRadius: 12))
 
-				Text(item.name ?? item.category?.name ?? "Unnamed")
+				Text(item.name ?? item.category?.name ?? "Unnamed").opacity(item.nameGenerated == true ? 0.6 : 1)
 					.font(.caption.weight(.medium))
 					.foregroundStyle(.white)
 					.lineLimit(1)

@@ -451,7 +451,7 @@ public struct LocationDetailView: View {
 				}
 
 				VStack(alignment: .leading, spacing: 2) {
-					Text(item.name ?? item.brand ?? "Item")
+					Text(item.name ?? item.brand ?? "Item").opacity(item.nameGenerated == true ? 0.6 : 1)
 						.font(.subheadline.weight(.medium))
 						.foregroundStyle(.primary)
 						.lineLimit(1)
@@ -498,7 +498,7 @@ public struct LocationDetailView: View {
 					.clipShape(RoundedRectangle(cornerRadius: 8))
 
 				VStack(alignment: .leading, spacing: 2) {
-					Text(item.name ?? item.brand ?? "Item")
+					Text(item.name ?? item.brand ?? "Item").opacity(item.nameGenerated == true ? 0.6 : 1)
 						.font(.subheadline.weight(.medium))
 						.foregroundStyle(.primary)
 						.lineLimit(1)

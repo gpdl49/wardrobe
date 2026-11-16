@@ -345,6 +345,7 @@ struct ItemDetailView: View {
 		VStack(alignment: .leading, spacing: 14) {
 			// Title
 			Text(item.name ?? "Untitled Item")
+				.opacity(item.nameGenerated == true ? 0.6 : 1)
 				.font(.title2.bold())
 
 			// Location link

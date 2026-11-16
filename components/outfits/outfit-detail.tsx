@@ -116,7 +116,11 @@ export function OutfitDetail({ id }: { id: string }) {
 									alt=""
 									className="aspect-[4/5]"
 								/>
-								<p className="p-2">{itemTitle(item)}</p>
+								<p className="p-2">
+									<span style={{ opacity: item.nameGenerated ? 0.6 : 1 }}>
+										{itemTitle(item)}
+									</span>
+								</p>
 							</div>
 						),
 					)}

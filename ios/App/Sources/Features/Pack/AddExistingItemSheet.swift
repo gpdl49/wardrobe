@@ -67,7 +67,7 @@ struct AddExistingItemSheet: View {
 				.clipShape(RoundedRectangle(cornerRadius: 8))
 
 			VStack(alignment: .leading, spacing: 2) {
-				Text(item.name ?? "Unnamed item")
+				Text(item.name ?? "Unnamed item").opacity(item.nameGenerated == true ? 0.6 : 1)
 					.font(.headline)
 					.lineLimit(1)
 

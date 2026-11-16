@@ -82,6 +82,7 @@ describeWithDb("items API", () => {
 				ownerId: await userId(),
 				access: "owner",
 				name: null,
+				nameGenerated: false,
 				category: null,
 				brand: null,
 				size: null,

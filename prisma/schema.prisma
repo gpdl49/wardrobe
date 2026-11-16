@@ -233,6 +233,7 @@ model Item {
   owner        User       @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   /// Optional: rapid packing capture creates nameless items.
   name         String?    @db.VarChar(200)
+  nameGenerated Boolean @default(false)
   categoryId   String?    @map("category_id") @db.Uuid
   category     Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   brand        String?    @db.VarChar(100)

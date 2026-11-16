@@ -182,7 +182,7 @@ struct OutfitDetailView: View {
 	private func itemRow(_ item: ItemSummaryDTO) -> some View {
 		HStack {
 			RemotePhotoView(photo: item.coverPhoto, variant: .thumb).frame(width: 48, height: 48).clipped()
-			Text(item.name ?? "Untitled item")
+			Text(item.name ?? "Untitled item").opacity(item.nameGenerated == true ? 0.6 : 1)
 		}
 	}
 }

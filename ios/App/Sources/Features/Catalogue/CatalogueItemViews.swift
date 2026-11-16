@@ -24,6 +24,7 @@ struct CatalogueGridTile: View {
 
 			VStack(alignment: .leading, spacing: 2) {
 				Text(item.name ?? "Untitled item")
+					.opacity(item.nameGenerated == true ? 0.6 : 1)
 					.font(.subheadline.weight(.medium))
 					.foregroundStyle(.primary)
 					.lineLimit(1)
@@ -69,6 +70,7 @@ struct CatalogueListRow: View {
 
 			VStack(alignment: .leading, spacing: 3) {
 				Text(item.name ?? "Untitled item")
+					.opacity(item.nameGenerated == true ? 0.6 : 1)
 					.font(.body.weight(.medium))
 					.foregroundStyle(.primary)
 					.lineLimit(1)

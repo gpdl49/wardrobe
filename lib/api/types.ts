@@ -110,6 +110,8 @@ export interface ItemSummaryDto {
 	ownerId: string;
 	access: Access;
 	name: string | null;
+	/** True only for automatically applied vision names. */
+	nameGenerated?: boolean;
 	category: CategoryRef | null;
 	brand: string | null;
 	size: string | null;

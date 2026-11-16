@@ -179,6 +179,13 @@ export async function runVisionAnalysis(
 			});
 			return;
 		}
+		// Conditional write protects names entered while the model was running.
+		if (parsed.suggestion.name) {
+			await db().item.updateMany({
+				where: { id: analysis.itemId, name: null },
+				data: { name: parsed.suggestion.name, nameGenerated: true },
+			});
+		}
 		await finish(analysisId, {
 			status: "done",
 			model: response.model,

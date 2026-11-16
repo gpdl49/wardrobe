@@ -3,6 +3,12 @@ import Testing
 @testable import WardrobeKit
 
 @Suite struct ModelsTests {
+	@Test func roundTripsGeneratedName() throws {
+		let item = ItemSummaryDTO(id: "i", ownerId: "u", access: .owner, name: "Navy jumper", nameGenerated: true, createdAt: Date(), updatedAt: Date())
+		let decoded = try JSONDecoder().decode(ItemSummaryDTO.self, from: JSONEncoder().encode(item))
+		#expect(decoded.nameGenerated == true)
+	}
+
 	@Test func decodesItemWithUnknownEnumAndBothDateForms() throws {
 		let json = """
 			{"id":"i1","ownerId":"u1","access":"owner","name":null,"category":null,"brand":null,
