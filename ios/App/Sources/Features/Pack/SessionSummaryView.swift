@@ -121,7 +121,7 @@ struct SessionSummaryView: View {
 										.clipShape(RoundedRectangle(cornerRadius: 12))
 
 									VStack(alignment: .leading, spacing: 2) {
-										Text(item.name ?? item.category?.name ?? "Unnamed")
+										Text(item.name ?? item.category?.name ?? "Unnamed").opacity(item.nameGenerated == true ? 0.6 : 1)
 											.font(.subheadline.weight(.semibold))
 											.lineLimit(1)
 											.foregroundStyle(.primary)

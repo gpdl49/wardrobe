@@ -119,6 +119,7 @@ export function toItemSummaryDto(
 		ownerId: item.ownerId,
 		access,
 		name: item.name,
+		nameGenerated: item.nameGenerated,
 		category: item.category ? toCategoryRef(item.category) : null,
 		brand: item.brand,
 		size: item.size,

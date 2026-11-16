@@ -264,6 +264,7 @@ async function setTags(
 function columns(input: CreateItemInput | UpdateItemInput) {
 	return {
 		name: input.name,
+		nameGenerated: input.name !== undefined ? false : undefined,
 		categoryId: input.categoryId,
 		brand: input.brand,
 		size: input.size,

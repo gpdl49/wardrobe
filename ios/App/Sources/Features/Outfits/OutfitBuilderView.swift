@@ -52,7 +52,7 @@ struct OutfitBuilderView: View {
 				}
 			}
 			Section("Items (\(model.selected.count)/50)") {
-				ForEach(model.selected) { item in Text(item.name ?? "Untitled item") }
+				ForEach(model.selected) { item in Text(item.name ?? "Untitled item").opacity(item.nameGenerated == true ? 0.6 : 1) }
 					.onDelete { model.selected.remove(atOffsets: $0) }
 					.onMove { model.selected.move(fromOffsets: $0, toOffset: $1) }
 				Button("Choose items") { picking = true }
@@ -75,7 +75,7 @@ private struct OutfitItemPicker: View {
 					let selected = model.selected.contains { $0.id == item.id }
 					Button { model.toggle(item) } label: {
 						HStack {
-							Text(item.name ?? "Untitled item")
+							Text(item.name ?? "Untitled item").opacity(item.nameGenerated == true ? 0.6 : 1)
 							Spacer()
 							if selected { Image(systemName: "checkmark").accessibilityLabel("Selected") }
 						}

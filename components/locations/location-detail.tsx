@@ -298,7 +298,9 @@ function ContentsSheet({
 								<span className="inline-block size-3.5 border border-black" />
 							</td>
 							<td className="py-1.5 pr-2 align-top">
-								{itemTitle(item)}
+								<span style={{ opacity: item.nameGenerated ? 0.6 : 1 }}>
+									{itemTitle(item)}
+								</span>
 								{item.brand ? (
 									<span className="text-neutral-600"> · {item.brand}</span>
 								) : null}

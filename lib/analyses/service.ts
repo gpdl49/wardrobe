@@ -153,6 +153,11 @@ export async function applyAnalysis(
 		for (const field of input.fields) {
 			switch (field) {
 				case "name":
+					if (suggestion.name !== undefined) {
+						data.name = suggestion.name;
+						data.nameGenerated = false;
+					}
+					break;
 				case "brand":
 				case "size":
 				case "pattern":

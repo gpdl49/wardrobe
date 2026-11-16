@@ -90,7 +90,10 @@ function ItemView({ item }: { item: ItemDetailDto }) {
 				>
 					<ArrowLeft />
 				</Button>
-				<h1 className="min-w-0 flex-1 truncate text-2xl font-semibold tracking-tight">
+				<h1
+					style={{ opacity: item.nameGenerated ? 0.6 : 1 }}
+					className="min-w-0 flex-1 truncate text-2xl font-semibold tracking-tight"
+				>
 					{title}
 				</h1>
 				{canEdit && !editing ? (

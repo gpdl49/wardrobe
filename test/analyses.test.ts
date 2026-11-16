@@ -5,6 +5,7 @@ import {
 	GET as listRoute,
 	POST as rerunRoute,
 } from "@/app/api/items/[id]/analyses/route";
+import { PATCH as updateRoute } from "@/app/api/items/[id]/route";
 import {
 	enqueuePhotoAnalyses,
 	STALE_AFTER_MS,
@@ -322,6 +323,59 @@ describeWithDb("analyses", () => {
 					],
 				}),
 			);
+
+		it.each([null, "My favourite jumper"])(
+			"automatically names only unnamed items (%s)",
+			async (name) => {
+				const { item, vision } = await setUp();
+				await db().item.update({ where: { id: item.id }, data: { name } });
+				await runVisionAnalysis(vision.id, {
+					fetch: reply({ name: "Navy jumper" }),
+				});
+				const updated = await db().item.findUniqueOrThrow({
+					where: { id: item.id },
+				});
+				expect(updated.name).toBe(name ?? "Navy jumper");
+				expect(updated.nameGenerated).toBe(name === null);
+			},
+		);
+
+		it("clears provenance on explicit naming and preserves it on other edits", async () => {
+			const { item, vision } = await setUp();
+			await db().item.update({ where: { id: item.id }, data: { name: null } });
+			await runVisionAnalysis(vision.id, {
+				fetch: reply({ name: "Navy jumper" }),
+			});
+			for (const [body, generated] of [
+				[{ notes: "Warm" }, true],
+				[{ name: "My jumper" }, false],
+			] as const) {
+				const response = await updateRoute(
+					apiRequest(`/api/items/${item.id}`, { method: "PATCH", body }),
+					routeParams({ id: item.id }),
+				);
+				expect(response.status).toBe(200);
+				expect((await response.json()).nameGenerated).toBe(generated);
+			}
+		});
+
+		it("preserves a name entered during analysis", async () => {
+			const { item, vision } = await setUp();
+			await db().item.update({ where: { id: item.id }, data: { name: null } });
+			const response = reply({ name: "Navy jumper" });
+			await runVisionAnalysis(vision.id, {
+				fetch: async (...args) => {
+					await db().item.update({
+						where: { id: item.id },
+						data: { name: "My jumper" },
+					});
+					return response(...args);
+				},
+			});
+			expect(
+				await db().item.findUniqueOrThrow({ where: { id: item.id } }),
+			).toMatchObject({ name: "My jumper", nameGenerated: false });
+		});
 
 		it("sends main then label photos and stores the validated suggestion", async () => {
 			const { vision } = await setUp();
