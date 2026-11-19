@@ -1,5 +1,6 @@
 import { encode as encodeBlurhash } from "blurhash";
 import sharp, { type Metadata, type OutputInfo } from "sharp";
+import { removePhotoBackground } from "@/lib/photos/background";
 
 /**
  * Pure image work for the `photo.renditions` job: decode an original, apply
@@ -38,7 +39,10 @@ export type Renditions = {
 	blurhash: string;
 };
 
-export async function renderRenditions(input: Uint8Array): Promise<Renditions> {
+export async function renderRenditions(
+	input: Uint8Array,
+	{ removeBackground = false } = {},
+): Promise<Renditions> {
 	let metadata: Metadata;
 	let oriented: { data: Buffer; info: OutputInfo };
 	try {
@@ -60,24 +64,28 @@ export async function renderRenditions(input: Uint8Array): Promise<Renditions> {
 		);
 	}
 
-	const raw = {
-		raw: {
-			width: oriented.info.width,
-			height: oriented.info.height,
-			channels: oriented.info.channels,
-		},
-	} as const;
+	const photo =
+		(removeBackground && (await removePhotoBackground(oriented))) || oriented;
+	const source = (image: typeof oriented) =>
+		sharp(image.data, {
+			raw: {
+				width: image.info.width,
+				height: image.info.height,
+				channels: image.info.channels,
+			},
+		});
 
 	const [display, thumb, small] = await Promise.all([
-		sharp(oriented.data, raw).webp({ quality: 82 }).toBuffer(),
-		sharp(oriented.data, raw)
+		source(photo).webp({ quality: 82 }).toBuffer(),
+		source(photo)
 			.resize(THUMB_EDGE, THUMB_EDGE, {
 				fit: "inside",
 				withoutEnlargement: true,
 			})
 			.webp({ quality: 75 })
 			.toBuffer(),
-		sharp(oriented.data, raw)
+		// Blurhash has no alpha channel, so use the original for the placeholder.
+		source(oriented)
 			.resize(BLURHASH_EDGE, BLURHASH_EDGE, { fit: "inside" })
 			.ensureAlpha()
 			.raw()

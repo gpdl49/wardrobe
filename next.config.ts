@@ -25,6 +25,7 @@ const CSP = [
 
 const nextConfig: NextConfig = {
 	output: "standalone",
+	serverExternalPackages: ["onnxruntime-web"],
 	// This project is a submodule of gpdl49/homestacks, which has its own
 	// lockfile; pin the tracing root here so standalone output is flat.
 	outputFileTracingRoot: import.meta.dirname,

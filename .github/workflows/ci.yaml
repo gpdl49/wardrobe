@@ -54,7 +54,9 @@ jobs:
         run: aube run --no-install typecheck
 
       - name: Test
-        run: aube run --no-install test
+        run: |
+          node scripts/fetch-photo-model.mjs
+          aube run --no-install test
 
       - name: Build
         run: aube run --no-install build

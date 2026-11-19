@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import type { Job } from "pg-boss";
 import sharp from "sharp";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -96,6 +97,28 @@ describeWithDb("photo.renditions job", () => {
 				.coverPhotoId,
 		).toBe(main.id);
 	});
+
+	it("only cuts out main photos and keeps the original upload", async () => {
+		const original = await readFile(
+			new URL("./fixtures/white-shirt.jpg", import.meta.url),
+		);
+		for (const kind of ["main", "detail", "label", "outfit"] as const) {
+			const photo = await makePhoto({ kind });
+			const originalKey = photoKey(photo.id, "original");
+			s3.upload(originalKey, original);
+
+			await run(photo.id);
+
+			expect((await reload(photo.id)).status).toBe("ready");
+			expect(s3.objects.get(originalKey)?.body).toEqual(original);
+			for (const variant of ["display", "thumb"] as const) {
+				const rendition = s3.objects.get(photoKey(photo.id, variant));
+				expect((await sharp(rendition?.body).metadata()).hasAlpha).toBe(
+					kind === "main",
+				);
+			}
+		}
+	}, 15_000);
 
 	it("keeps an existing cover", async () => {
 		const item = await makeItem();
