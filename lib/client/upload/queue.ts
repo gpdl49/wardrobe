@@ -256,6 +256,27 @@ export class UploadQueue {
 		return this.add(job, input.blob);
 	}
 
+	/**
+	 * Adds a photo of any garment kind to an existing item (the item page's
+	 * photo slots). Not part of a packing session.
+	 */
+	async enqueueItemPhoto(input: {
+		blob: Blob;
+		itemId: string;
+		kind: Exclude<PhotoKind, "outfit">;
+	}): Promise<UploadJob> {
+		const job = this.newJob({
+			locationId: "",
+			sessionId: null,
+			kind: input.kind,
+			createItem: false,
+			parentJobId: null,
+			itemId: input.itemId,
+			fields: {},
+		});
+		return this.add(job, input.blob);
+	}
+
 	/** Edits the quick fields of a capture's item; PATCHes if it already exists. */
 	async updateFields(id: string, fields: ItemFields): Promise<void> {
 		const job = this.jobs.get(id);

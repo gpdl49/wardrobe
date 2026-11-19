@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { renderCutoutRenditions } from "@/lib/photos/renditions";
+import { isGarmentKind } from "@/lib/photos/schema";
 import { deleteObjects, getObjectBytes, photoKey, putObject } from "@/lib/s3";
 
 export async function processPhotoBackground(
@@ -11,7 +12,7 @@ export async function processPhotoBackground(
 	const pending = { id: photoId, backgroundStatus: "queued" } as const;
 	try {
 		const cutout =
-			photo.kind === "main" && photo.status === "ready"
+			isGarmentKind(photo.kind) && photo.status === "ready"
 				? await renderCutoutRenditions(
 						await getObjectBytes(photoKey(photoId, "original")),
 					)

@@ -53,4 +53,18 @@ import Testing
 	func locationCodes(raw: String, expected: String?) {
 		#expect(normalizeLocationCode(raw) == expected)
 	}
+
+	@Test func garmentPhotosUseCutoutsOnceReady() {
+		func photo(_ kind: PhotoKind, _ status: PhotoBackgroundStatus?) -> PhotoDTO {
+			PhotoDTO(
+				id: "p", ownerId: "u", access: .owner, itemId: nil, kind: kind, status: .ready,
+				contentType: "image/jpeg", size: 1, createdAt: .now, backgroundStatus: status
+			)
+		}
+		#expect(photo(.main, .ready).rendition(.thumb) == .cutoutThumb)
+		#expect(photo(.back, .ready).rendition(.display) == .cutoutDisplay)
+		#expect(photo(.back, .queued).rendition(.thumb) == .thumb)
+		#expect(photo(.label, .ready).rendition(.thumb) == .thumb)
+		#expect(PhotoKind(rawValue: "back").isKnown)
+	}
 }

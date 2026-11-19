@@ -1,7 +1,18 @@
 import { z } from "zod";
 import { MAX_ORIGINAL_BYTES, PHOTO_VARIANTS } from "@/lib/s3";
 
-export const PHOTO_KINDS = ["main", "label", "detail", "outfit"] as const;
+export const PHOTO_KINDS = [
+	"main",
+	"back",
+	"label",
+	"detail",
+	"outfit",
+] as const;
+
+/** Photos of the whole garment (front and back): background removal applies. */
+export function isGarmentKind(kind: string): kind is "main" | "back" {
+	return kind === "main" || kind === "back";
+}
 
 /** Content types the API accepts for an original (docs/wardrobe.md). */
 export const PHOTO_CONTENT_TYPES = [

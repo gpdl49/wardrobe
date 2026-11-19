@@ -5,11 +5,12 @@ import {
 	Camera,
 	Check,
 	CloudOff,
+	FlipHorizontal2,
 	Loader2,
 	RotateCw,
 	Tag,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { CategoryChips } from "@/components/pack/category-chips";
 import type {
 	CategoryDto,
@@ -98,15 +99,20 @@ export function CaptureLoop({
 		}
 	};
 
-	const addLabel = async (files: FileList | null) => {
-		const file = files?.[0];
-		if (!file || !selected) return;
-		try {
-			await queue.enqueueExtraPhoto({ blob: file, parentJobId: selected.id });
-		} catch (err) {
-			setError(String(err));
-		}
-	};
+	const addExtra =
+		(kind: "label" | "back") => async (files: FileList | null) => {
+			const file = files?.[0];
+			if (!file || !selected) return;
+			try {
+				await queue.enqueueExtraPhoto({
+					blob: file,
+					parentJobId: selected.id,
+					kind,
+				});
+			} catch (err) {
+				setError(String(err));
+			}
+		};
 
 	const pending = captures.filter((job) => job.status !== "done").length;
 
@@ -172,7 +178,7 @@ export function CaptureLoop({
 						>
 							<Preview blob={job.preview} />
 							<StatusBadge state={captureState(job, statuses)} />
-							{(extras.get(job.id)?.length ?? 0) > 0 && (
+							{extras.get(job.id)?.some((e) => e.kind === "label") && (
 								<span className="absolute bottom-1 left-1 rounded bg-black/60 p-0.5 text-white">
 									<Tag className="size-3" aria-label="Has label photo" />
 								</span>
@@ -196,7 +202,8 @@ export function CaptureLoop({
 						for (const extra of extras.get(selected.id) ?? [])
 							void queue.retry(extra.id);
 					}}
-					onLabel={addLabel}
+					onLabel={addExtra("label")}
+					onBack={addExtra("back")}
 				/>
 			) : (
 				<p className="py-6 text-center text-neutral-500">
@@ -239,6 +246,7 @@ function SelectedPanel({
 	onFields,
 	onRetry,
 	onLabel,
+	onBack,
 }: {
 	job: UploadJob;
 	index: number;
@@ -251,6 +259,7 @@ function SelectedPanel({
 	}) => void;
 	onRetry: () => void;
 	onLabel: (files: FileList | null) => void;
+	onBack: (files: FileList | null) => void;
 }) {
 	const [name, setName] = useState(job.fields.name ?? "");
 	const saved = useRef(job.fields.name ?? "");
@@ -291,7 +300,7 @@ function SelectedPanel({
 						onClick={onRetry}
 						className="self-start text-sm text-red-600 underline"
 					>
-						Label photo failed — retry
+						Extra photo failed — retry
 					</button>
 				)
 			)}
@@ -316,22 +325,59 @@ function SelectedPanel({
 					onChange={(categoryId) => onFields({ categoryId })}
 				/>
 			)}
-			<label className="flex cursor-pointer items-center gap-2 self-start rounded-lg border border-neutral-300 px-3 py-2 text-sm font-medium dark:border-neutral-700">
-				<Tag className="size-4" aria-hidden />
-				{extras.length > 0 ? "Add another label photo" : "Add label photo"}
-				<input
-					type="file"
-					accept="image/*"
-					capture="environment"
-					className="sr-only"
-					data-testid="label-input"
-					onChange={(e) => {
-						onLabel(e.target.files);
-						e.target.value = "";
-					}}
+			<div className="flex flex-wrap gap-2">
+				<ExtraPhotoInput
+					testId="back-input"
+					icon={<FlipHorizontal2 className="size-4" aria-hidden />}
+					text={
+						extras.some((e) => e.kind === "back")
+							? "Add another back photo"
+							: "Add back photo"
+					}
+					onFiles={onBack}
 				/>
-			</label>
+				<ExtraPhotoInput
+					testId="label-input"
+					icon={<Tag className="size-4" aria-hidden />}
+					text={
+						extras.some((e) => e.kind === "label")
+							? "Add another label photo"
+							: "Add label photo"
+					}
+					onFiles={onLabel}
+				/>
+			</div>
 		</section>
+	);
+}
+
+function ExtraPhotoInput({
+	testId,
+	icon,
+	text,
+	onFiles,
+}: {
+	testId: string;
+	icon: ReactNode;
+	text: string;
+	onFiles: (files: FileList | null) => void;
+}) {
+	return (
+		<label className="flex cursor-pointer items-center gap-2 rounded-lg border border-neutral-300 px-3 py-2 text-sm font-medium dark:border-neutral-700">
+			{icon}
+			{text}
+			<input
+				type="file"
+				accept="image/*"
+				capture="environment"
+				className="sr-only"
+				data-testid={testId}
+				onChange={(e) => {
+					onFiles(e.target.files);
+					e.target.value = "";
+				}}
+			/>
+		</label>
 	);
 }
 

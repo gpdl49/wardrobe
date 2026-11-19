@@ -11,8 +11,10 @@ final class NewItemModel {
 	var ownerId: ID? = nil
 	var notes: String = ""
 
-	var capturedPhotoData: Data? = nil
-	var photoKind: PhotoKind = .main
+	/// Photos picked so far, keyed by slot (Front, Back, Label, Details).
+	private(set) var photos: [PhotoSlot: Data] = [:]
+	/// Detail slots in the order they were added.
+	private(set) var detailSlots: [PhotoSlot] = []
 
 	var locations: [LocationDTO] = []
 	var categories: [CategoryDTO] = []
@@ -32,7 +34,30 @@ final class NewItemModel {
 	}
 
 	var hasPhoto: Bool {
-		capturedPhotoData != nil
+		!photos.isEmpty
+	}
+
+	/// Every slot to show: the fixed ones, then each detail.
+	var slots: [PhotoSlot] {
+		[.front, .back, .label] + detailSlots
+	}
+
+	/// Filled slots in upload order; the first one creates the item and
+	/// becomes its cover.
+	var orderedPhotos: [(slot: PhotoSlot, data: Data)] {
+		slots.compactMap { slot in photos[slot].map { (slot, $0) } }
+	}
+
+	func setPhoto(_ data: Data, for slot: PhotoSlot) {
+		if case .detail = slot, !detailSlots.contains(slot) {
+			detailSlots.append(slot)
+		}
+		photos[slot] = data
+	}
+
+	func removePhoto(_ slot: PhotoSlot) {
+		photos[slot] = nil
+		detailSlots.removeAll { $0 == slot }
 	}
 
 	func loadData(api: any WardrobeAPI) async {
@@ -65,13 +90,23 @@ final class NewItemModel {
 		)
 
 		do {
-			if let photoData = capturedPhotoData {
+			let ordered = orderedPhotos
+			if let first = ordered.first {
+				// The first photo creates the item; the rest wait for it.
 				let jobId = try uploads.enqueue(
-					imageData: photoData,
-					kind: photoKind,
+					imageData: first.data,
+					kind: first.slot.kind,
 					target: .newItem(request),
 					sessionId: nil
 				)
+				for photo in ordered.dropFirst() {
+					try uploads.enqueue(
+						imageData: photo.data,
+						kind: photo.slot.kind,
+						target: .afterJob(jobId),
+						sessionId: nil
+					)
+				}
 				return uploads.itemId(of: jobId)
 			} else {
 				let summary = try await api.createItem(request, idempotencyKey: UUID().uuidString)
@@ -82,4 +117,30 @@ final class NewItemModel {
 			return nil
 		}
 	}
+}
+
+/// A place for one photo in the new-item form.
+enum PhotoSlot: Hashable, Identifiable {
+	case front, back, label
+	case detail(UUID)
+
+	var id: String {
+		switch self {
+		case .front: "front"
+		case .back: "back"
+		case .label: "label"
+		case .detail(let id): "detail-\(id.uuidString)"
+		}
+	}
+
+	var kind: PhotoKind {
+		switch self {
+		case .front: .main
+		case .back: .back
+		case .label: .label
+		case .detail: .detail
+		}
+	}
+
+	var title: String { kind.displayName }
 }

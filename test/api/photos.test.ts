@@ -130,6 +130,21 @@ describeWithDb("photos API", () => {
 			expect(cutout.headers.get("location")).toContain("cutout-display.webp");
 		});
 
+		it("removes the background of a back photo too", async () => {
+			const back = await makePhoto({ status: "ready", kind: "back" });
+			const response = await removeBackground(back.id);
+			expect(response.status).toBe(202);
+			expect(await json<PhotoDto>(response)).toMatchObject({
+				kind: "back",
+				backgroundStatus: "queued",
+			});
+			await db().photo.update({
+				where: { id: back.id },
+				data: { backgroundStatus: "ready" },
+			});
+			expect((await variant(back.id, "cutout-thumb")).status).toBe(302);
+		});
+
 		it("checks access and rejects photos outside the action's scope", async () => {
 			const photo = await makePhoto({ status: "ready" });
 			expect((await removeBackground(photo.id, OTHER_USER)).status).toBe(404);
@@ -137,6 +152,8 @@ describeWithDb("photos API", () => {
 			expect((await removeBackground(photo.id, OTHER_USER)).status).toBe(403);
 			const label = await makePhoto({ status: "ready", kind: "label" });
 			expect((await removeBackground(label.id)).status).toBe(422);
+			const detail = await makePhoto({ status: "ready", kind: "detail" });
+			expect((await removeBackground(detail.id)).status).toBe(422);
 			const pending = await makePhoto();
 			expect((await removeBackground(pending.id)).status).toBe(409);
 			expect(enqueue).not.toHaveBeenCalled();

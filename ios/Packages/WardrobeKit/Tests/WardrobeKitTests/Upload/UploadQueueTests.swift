@@ -708,6 +708,97 @@ struct UploadQueueTests {
 		#expect(doneJob?.phase == .done)
 	}
 
+	@Test @MainActor func extraPhotosAttachToTheItemOfTheirParentJob() async throws {
+		let tempDir = try createTempDir()
+		defer { try? FileManager.default.removeItem(at: tempDir) }
+		let api = ScriptedWardrobeAPI()
+		let queue = UploadQueue(api: api, directory: tempDir, sleeper: { _ in }, clock: { Date.now })
+		queue.start(userSub: "user-multi")
+
+		let front = try queue.enqueue(
+			imageData: makeTestImageData(), kind: .main,
+			target: .newItem(CreateItemRequest(name: "Coat")), sessionId: nil
+		)
+		let back = try queue.enqueue(imageData: makeTestImageData(), kind: .back, target: .afterJob(front), sessionId: nil)
+		let label = try queue.enqueue(imageData: makeTestImageData(), kind: .label, target: .afterJob(front), sessionId: nil)
+
+		await queue.waitForIdle()
+
+		let itemId = queue.itemId(of: front)
+		#expect(itemId != nil)
+		for id in [front, back, label] {
+			let job = queue.jobs.first { $0.id == id }
+			#expect(job?.phase == .done)
+			#expect(job?.itemId == itemId)
+		}
+		let calls = api.calls
+		#expect(calls.filter { $0.path == "/api/items" }.count == 1)
+		let photoCalls = calls.filter { $0.path == "/api/photos" }
+		#expect(photoCalls.count == 3)
+		#expect(photoCalls.allSatisfy { $0.bodySummary == "itemId=\(itemId ?? "nil")" })
+		// The front is created first, so it becomes the cover.
+		#expect(calls.firstIndex { $0.path == "/api/photos" } == 1)
+	}
+
+	@Test @MainActor func extraPhotosWaitForAFailedParentAndFollowItsRetry() async throws {
+		let tempDir = try createTempDir()
+		defer { try? FileManager.default.removeItem(at: tempDir) }
+		let fail = LockIsolated(true)
+		let api = ScriptedWardrobeAPI()
+		api.onCreateItem = { body, _ in
+			if fail.value {
+				throw APIError(status: 422, error: "unprocessable", message: "Location is archived")
+			}
+			return ItemSummaryDTO(id: "item-late", ownerId: "user-1", access: .owner, name: body.name, createdAt: .now, updatedAt: .now)
+		}
+		let queue = UploadQueue(api: api, directory: tempDir, sleeper: { _ in }, clock: { Date.now })
+		queue.start(userSub: "user-wait")
+
+		let front = try queue.enqueue(
+			imageData: makeTestImageData(), kind: .main,
+			target: .newItem(CreateItemRequest(name: "Coat")), sessionId: nil
+		)
+		let back = try queue.enqueue(imageData: makeTestImageData(), kind: .back, target: .afterJob(front), sessionId: nil)
+
+		await queue.waitForIdle()
+		#expect(queue.jobs.first { $0.id == front }?.phase == .failed)
+		#expect(queue.jobs.first { $0.id == back }?.phase == .waiting)
+		#expect(!api.calls.contains { $0.path == "/api/photos" })
+
+		fail.withValue { $0 = false }
+		queue.retry(jobId: front)
+		await queue.waitForIdle()
+		#expect(queue.jobs.first { $0.id == back }?.phase == .done)
+		#expect(queue.jobs.first { $0.id == back }?.itemId == "item-late")
+	}
+
+	@Test @MainActor func discardingAParentDiscardsItsWaitingPhotos() async throws {
+		let tempDir = try createTempDir()
+		defer { try? FileManager.default.removeItem(at: tempDir) }
+		let queue = UploadQueue(api: ScriptedWardrobeAPI(), directory: tempDir, sleeper: { _ in }, clock: { Date.now })
+		queue.start(userSub: "user-cascade")
+		queue.pause()
+
+		let front = try queue.enqueue(
+			imageData: makeTestImageData(), kind: .main,
+			target: .newItem(CreateItemRequest(name: "Coat")), sessionId: nil
+		)
+		_ = try queue.enqueue(imageData: makeTestImageData(), kind: .back, target: .afterJob(front), sessionId: nil)
+		_ = try queue.enqueue(imageData: makeTestImageData(), kind: .label, target: .item("item-other"), sessionId: nil)
+
+		queue.discard(jobId: front)
+		#expect(queue.jobs.count == 1)
+		#expect(queue.jobs.first?.target == .item("item-other"))
+	}
+
+	@Test func afterJobTargetRoundTrips() throws {
+		let parent = UUID()
+		let job = UploadJob(userSub: "u", target: .afterJob(parent), kind: .back)
+		let decoded = try JSONDecoder().decode(UploadJob.self, from: JSONEncoder().encode(job))
+		#expect(decoded.target == .afterJob(parent))
+		#expect(decoded.kind == .back)
+	}
+
 	@Test @MainActor func discardRemovesJobAndFiles() throws {
 		let tempDir = try createTempDir()
 		defer { try? FileManager.default.removeItem(at: tempDir) }

@@ -120,7 +120,12 @@ export async function enqueuePhotoAnalyses(
 	if (photo.kind === "main") {
 		created.push(await queueColorsAnalysis(photo.itemId, photo.id));
 	}
-	if ((photo.kind === "main" || photo.kind === "label") && analysisEnabled()) {
+	if (
+		(photo.kind === "main" ||
+			photo.kind === "back" ||
+			photo.kind === "label") &&
+		analysisEnabled()
+	) {
 		const vision = await queueVisionAnalysis(photo.itemId, photo.id, {
 			startAfter: VISION_DELAY_SECONDS,
 		});

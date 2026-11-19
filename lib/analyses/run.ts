@@ -27,6 +27,7 @@ import type {
 
 /** Photos sent per vision call: enough for the item and its labels. */
 const MAX_MAIN_PHOTOS = 2;
+const MAX_BACK_PHOTOS = 1;
 const MAX_LABEL_PHOTOS = 2;
 /** Long edge of images sent to the model; labels larger, for legibility. */
 const MAIN_EDGE = 768;
@@ -116,17 +117,21 @@ export async function runVisionAnalysis(
 		const photos = await db().photo.findMany({
 			where: {
 				itemId: analysis.itemId,
-				kind: { in: ["main", "label"] },
+				kind: { in: ["main", "back", "label"] },
 				status: "ready",
 			},
 			orderBy: [{ createdAt: "asc" }, { id: "asc" }],
 		});
 		const selected = [
 			...photos.filter((p) => p.kind === "main").slice(0, MAX_MAIN_PHOTOS),
+			...photos.filter((p) => p.kind === "back").slice(0, MAX_BACK_PHOTOS),
 			...photos.filter((p) => p.kind === "label").slice(0, MAX_LABEL_PHOTOS),
 		];
 		if (selected.length === 0) {
-			await fail(analysisId, "The item has no ready main or label photo");
+			await fail(
+				analysisId,
+				"The item has no ready front, back or label photo",
+			);
 			return;
 		}
 		const images: VisionImage[] = await Promise.all(

@@ -41,6 +41,7 @@ import {
 import { ItemForm } from "./item-form";
 import { ColorDots } from "./item-tile";
 import { PhotoGallery } from "./photo-gallery";
+import { PhotoSlots } from "./photo-slots";
 import { SuggestionsPanel } from "./suggestions-panel";
 
 export function ItemDetail({ id }: { id: string }) {
@@ -66,6 +67,7 @@ export function ItemDetail({ id }: { id: string }) {
 function ItemView({ item }: { item: ItemDetailDto }) {
 	const router = useRouter();
 	const [editing, setEditing] = useState(false);
+	const [show, setShow] = useState<{ photoId: string } | null>(null);
 	const remove = useDeleteItem();
 	const update = useUpdateItem(item.id);
 	const removeBackground = useRemovePhotoBackground(item.id);
@@ -126,8 +128,9 @@ function ItemView({ item }: { item: ItemDetailDto }) {
 			</div>
 
 			<div className="grid gap-6 md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:gap-8">
-				<div className="md:sticky md:top-20 md:self-start">
+				<div className="flex flex-col gap-3 md:sticky md:top-20 md:self-start">
 					<PhotoGallery
+						show={show}
 						photos={photos}
 						alt={title}
 						coverPhotoId={item.coverPhoto?.id}
@@ -145,8 +148,9 @@ function ItemView({ item }: { item: ItemDetailDto }) {
 								: undefined
 						}
 					/>
-					<ErrorText error={update.error} className="mt-2" />
-					<ErrorText error={removeBackground.error} className="mt-2" />
+					<PhotoSlots item={item} onShow={(photoId) => setShow({ photoId })} />
+					<ErrorText error={update.error} />
+					<ErrorText error={removeBackground.error} />
 				</div>
 				<div className="flex min-w-0 flex-col gap-6">
 					{canEdit && editing ? (

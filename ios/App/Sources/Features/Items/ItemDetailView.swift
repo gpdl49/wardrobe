@@ -143,9 +143,9 @@ struct ItemDetailView: View {
 				Form {
 					Section("Photo kind") {
 						Picker("Kind", selection: Binding(get: { vm.selectedKind }, set: { vm.selectedKind = $0 })) {
-							Text("Main").tag(PhotoKind.main)
-							Text("Label").tag(PhotoKind.label)
-							Text("Detail").tag(PhotoKind.detail)
+							ForEach(PhotoKind.itemKinds, id: \.self) { kind in
+								Text(kind.displayName).tag(kind)
+							}
 						}
 						.pickerStyle(.inline)
 					}
@@ -229,24 +229,34 @@ struct ItemDetailView: View {
 								RemotePhotoView(photo: photo, variant: .display, contentMode: .fit)
 									.frame(maxWidth: .infinity, maxHeight: .infinity)
 
-								// Status overlay
-								if photo.status != .ready {
-									HStack(spacing: 4) {
-										if photo.status == .failed {
-											Image(systemName: "exclamationmark.triangle")
-											Text("Processing failed")
-										} else {
-											ProgressView().controlSize(.mini)
-											Text("Processing…")
+								// Kind badge and status overlay
+								VStack(alignment: .leading, spacing: 6) {
+									Text(photo.kind.displayName)
+										.font(.caption2.bold())
+										.padding(.horizontal, 8)
+										.padding(.vertical, 4)
+										.background(.black.opacity(0.6), in: Capsule())
+										.foregroundStyle(.white)
+										.accessibilityLabel("\(photo.kind.displayName) photo")
+
+									if photo.status != .ready {
+										HStack(spacing: 4) {
+											if photo.status == .failed {
+												Image(systemName: "exclamationmark.triangle")
+												Text("Processing failed")
+											} else {
+												ProgressView().controlSize(.mini)
+												Text("Processing…")
+											}
 										}
+										.font(.caption2.bold())
+										.padding(.horizontal, 8)
+										.padding(.vertical, 4)
+										.background(.black.opacity(0.7), in: Capsule())
+										.foregroundStyle(.white)
 									}
-									.font(.caption2.bold())
-									.padding(.horizontal, 8)
-									.padding(.vertical, 4)
-									.background(.black.opacity(0.7), in: Capsule())
-									.foregroundStyle(.white)
-									.padding(8)
 								}
+								.padding(8)
 
 								// Top-right controls: cover badge & photo actions
 								HStack {
@@ -275,14 +285,16 @@ struct ItemDetailView: View {
 									if vm.canEdit {
 										Menu {
 											Section("Photo kind") {
-												Button("Main") {
-													Task { await vm.changePhotoKind(photoId: photo.id, kind: .main) }
-												}
-												Button("Label") {
-													Task { await vm.changePhotoKind(photoId: photo.id, kind: .label) }
-												}
-												Button("Detail") {
-													Task { await vm.changePhotoKind(photoId: photo.id, kind: .detail) }
+												ForEach(PhotoKind.itemKinds, id: \.self) { kind in
+													Button {
+														Task { await vm.changePhotoKind(photoId: photo.id, kind: kind) }
+													} label: {
+														if photo.kind == kind {
+															Label(kind.displayName, systemImage: "checkmark")
+														} else {
+															Text(kind.displayName)
+														}
+													}
 												}
 											}
 
@@ -316,7 +328,7 @@ struct ItemDetailView: View {
 
 			if vm.canEdit, vm.sortedPhotos.indices.contains(vm.selectedPhotoIndex) {
 				let photo = vm.sortedPhotos[vm.selectedPhotoIndex]
-				if photo.access.canEdit && photo.kind == .main && photo.status == .ready {
+				if photo.access.canEdit && photo.kind.isGarment && photo.status == .ready {
 					photoBackgroundButton(photo: photo, vm: vm)
 				}
 			}

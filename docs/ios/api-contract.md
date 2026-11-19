@@ -111,6 +111,10 @@ Client rules:
 
 ## Photos
 
+- **Kinds**: item photos are `main` (the front, shown as "Front"), `back`,
+  `label` and `detail`; `PhotoKind.itemKinds` lists them in display order.
+  The detail carousel badges each photo with its kind. `PhotoKind` is an open
+  enum, so a kind this build doesn't know still decodes.
 - **Capture → upload**: the app converts every capture to JPEG on the device
   (ImageIO, longest edge 2400 px, quality 0.85, orientation applied, EXIF/GPS
   stripped) before `POST /api/photos {itemId?, kind, contentType: "image/jpeg",
@@ -130,7 +134,7 @@ Client rules:
   loader caches them on disk (`Caches/photos/<photoId>/<variant>`, LRU,
   500 MB cap) and in memory. Presigned URLs are not cached past 4 minutes.
 - **Remove background** queues an optional job via `POST /api/photos/{id}/background`
-  for a ready main garment photo. While `PhotoDTO.backgroundStatus` is `queued`,
+  for a ready `main` or `back` photo (`PhotoKind.isGarment`). While `PhotoDTO.backgroundStatus` is `queued`,
   poll the item detail. On `ready`, use `cutout-display` and `cutout-thumb` as
   separate cache variants. Cutouts are cropped to the garment at 4:5 with a
   margin, so draw them aspect-fit (never fill). On `skipped` or `failed`,
@@ -153,6 +157,15 @@ permanent failures mark the job `failed` with the error for the user to retry
 or discard. The queue runs on launch, on `scenePhase == .active`, and when
 `NWPathMonitor` reports a satisfied path; it pauses when signed out and only
 runs jobs of the signed-in `sub`. A finished job deletes its files.
+
+A new item with several photos is one `.newItem` job (the first filled slot:
+Front, then Back, Label, Details) plus one `.afterJob(<that job id>)` job per
+other photo. An `.afterJob` job waits, without counting as due, until its
+parent has created the item, then takes that item id (persisted at once) and
+runs like an `.item` job; jobs of one item run one at a time, so the first
+photo completes first and becomes the cover. Retrying a failed parent releases
+its waiting photos; discarding it discards them; an `.afterJob` job whose
+parent is gone without an item fails.
 
 ## Deep links
 
@@ -179,7 +192,7 @@ production value `2J2LYH5QBS.xyz.vidur.wardrobe`), parsed in `lib/env.ts`.
 | Sign-in / no access | OIDC; `GET /me` |
 | Catalogue (grid/list, filters, search, wardrobe switcher) | `GET /items` (cursor), `GET /categories`, `GET /tags?owner=`, `GET /locations?owner=`, `GET /shared-with-me` |
 | Item detail / edit | `GET/PATCH/DELETE /items/{id}`, `POST /photos` + PUT + complete, `POST /photos/{id}/background`, `PATCH/DELETE /photos/{id}`, `GET/POST /items/{id}/analyses`, `POST …/apply` |
-| New item | `POST /items` (Idempotency-Key) + photo upload |
+| New item (photo slots: Front, Back, Label, any number of Details) | `POST /items` (Idempotency-Key) + photo uploads |
 | Locations (tree, filters, archived toggle) | `GET /locations?owner=&kind=&q=&archived=` |
 | Location detail (contents, children, QR label, share) | `GET /locations/{id}`, `PATCH/DELETE /locations/{id}`, `POST /locations`, `POST /items/move` |
 | Scan | on-device QR (VisionKit) → `GET /locations/by-code/{code}?owner=` |

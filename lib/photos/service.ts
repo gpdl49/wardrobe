@@ -27,6 +27,7 @@ import { ensureCover } from "@/lib/photos/cover";
 import { toPhotoDto } from "@/lib/photos/present";
 import {
 	type CreatePhotoInput,
+	isGarmentKind,
 	photoIdParam,
 	photoVariant,
 	UNSUPPORTED_CONTENT_TYPES,
@@ -245,7 +246,7 @@ export async function variantUrl(
 			? photo.status !== "pending"
 			: photo.status === "ready" &&
 				(!isCutout ||
-					(photo.kind === "main" && photo.backgroundStatus === "ready"));
+					(isGarmentKind(photo.kind) && photo.backgroundStatus === "ready"));
 	if (!available) {
 		throw notFound(`The ${parsedVariant.data} rendition is not ready`);
 	}
@@ -260,15 +261,17 @@ export async function queuePhotoBackground(
 ): Promise<PhotoDto> {
 	const { photo, access } = await findPhoto(await loadAccess(viewer), id);
 	requireEdit(access, "Photo");
-	if (photo.kind !== "main")
-		throw unprocessable("Only main garment photos support background removal");
+	if (!isGarmentKind(photo.kind))
+		throw unprocessable(
+			"Only front and back garment photos support background removal",
+		);
 	if (photo.status !== "ready") throw conflict("Wait until the photo is ready");
 
 	const updated = await db().$transaction(async (tx) => {
 		const [claimed] = await tx.photo.updateManyAndReturn({
 			where: {
 				id: photo.id,
-				kind: "main",
+				kind: { in: ["main", "back"] },
 				status: "ready",
 				OR: [{ backgroundStatus: null }, { backgroundStatus: "failed" }],
 			},

@@ -1,5 +1,6 @@
 import type { Access, PhotoDto } from "@/lib/api/types";
 import type { Photo } from "@/lib/generated/prisma/client";
+import { isGarmentKind } from "@/lib/photos/schema";
 import type { PhotoVariant } from "@/lib/s3";
 
 export function photoUrl(id: string, variant: PhotoVariant): string {
@@ -8,7 +9,8 @@ export function photoUrl(id: string, variant: PhotoVariant): string {
 
 /** Serialises a Photo row to its API shape (lib/api/types.ts). */
 export function toPhotoDto(photo: Photo, access: Access): PhotoDto {
-	const useCutout = photo.kind === "main" && photo.backgroundStatus === "ready";
+	const useCutout =
+		isGarmentKind(photo.kind) && photo.backgroundStatus === "ready";
 	return {
 		id: photo.id,
 		ownerId: photo.ownerId,

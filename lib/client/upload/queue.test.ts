@@ -310,6 +310,27 @@ describe("UploadQueue", () => {
 		expect(backend.find("POST", "/api/items")).toHaveLength(5);
 	});
 
+	it("adds a back photo to an existing item without creating one", async () => {
+		const { queue } = makeQueue();
+		await queue.start();
+		const job = await queue.enqueueItemPhoto({
+			blob: photo("back"),
+			itemId: "item-7",
+			kind: "back",
+		});
+		await queue.whenIdle();
+		expect(backend.find("POST", "/api/items")).toHaveLength(0);
+		expect(backend.find("POST", "/api/photos")[0]?.body).toMatchObject({
+			itemId: "item-7",
+			kind: "back",
+		});
+		expect(queue.get(job.id)).toMatchObject({
+			status: "done",
+			itemId: "item-7",
+			sessionId: null,
+		});
+	});
+
 	it("uploads a label photo once its capture's item exists", async () => {
 		const itemGate = deferred<Response>();
 		backend.use((c) => (c.url === "/api/items" ? itemGate.promise : undefined));

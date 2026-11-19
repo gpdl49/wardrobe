@@ -149,6 +149,15 @@ describeWithDb("analyses", () => {
 			expect(await enqueuePhotoAnalyses(detail)).toEqual([]);
 		});
 
+		it("queues only vision for a back photo", async () => {
+			setApiKey("sk-or-test");
+			const item = await makeItem();
+			const back = await makePhoto({ itemId: item.id, kind: "back" });
+			expect((await enqueuePhotoAnalyses(back)).map((a) => a.kind)).toEqual([
+				"vision",
+			]);
+		});
+
 		it("does not add a vision analysis while one is queued or running", async () => {
 			setApiKey("sk-or-test");
 			const item = await makeItem();
@@ -425,6 +434,34 @@ describeWithDb("analyses", () => {
 				tags: ["crew neck"],
 				labelText: "M\n100% wool",
 			});
+		});
+
+		it("sends the back between the front and label photos", async () => {
+			const { item, vision } = await setUp();
+			await makePhoto({ itemId: item.id, kind: "back" });
+			await makePhoto({ itemId: item.id, kind: "back" });
+			const fetchMock = reply({
+				name: "Navy jumper",
+				categorySlug: null,
+				brand: null,
+				size: null,
+				pattern: null,
+				material: null,
+				seasons: [],
+				tags: [],
+				labelText: null,
+			});
+			await runVisionAnalysis(vision.id, { fetch: fetchMock });
+			const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string);
+			expect(
+				body.messages[1].content
+					.filter((p: { type: string }) => p.type === "text")
+					.slice(1),
+			).toEqual([
+				{ type: "text", text: "Photo 1 (main):" },
+				{ type: "text", text: "Photo 2 (back):" },
+				{ type: "text", text: "Photo 3 (label):" },
+			]);
 		});
 
 		it("sends the owner's fifty most used tags to vision as data", async () => {

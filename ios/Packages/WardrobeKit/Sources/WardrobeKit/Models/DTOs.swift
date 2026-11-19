@@ -164,7 +164,7 @@ public struct PhotoDTO: Codable, Hashable, Sendable, Identifiable {
 	}
 
 	public func rendition(_ variant: PhotoVariant) -> PhotoVariant {
-		guard kind == .main, backgroundStatus == .ready else { return variant }
+		guard kind.isGarment, backgroundStatus == .ready else { return variant }
 		switch variant {
 		case .display: return .cutoutDisplay
 		case .thumb: return .cutoutThumb

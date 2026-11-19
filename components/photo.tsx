@@ -67,7 +67,9 @@ export function Photo({
 	const src = photo?.urls[variant];
 	const loaded = Boolean(src && src === loadedSrc);
 	const failed = Boolean(src && src === failedSrc);
-	const cutout = photo?.kind === "main" && photo.backgroundStatus === "ready";
+	const cutout =
+		(photo?.kind === "main" || photo?.kind === "back") &&
+		photo.backgroundStatus === "ready";
 	const showBlurhash = !(loaded && cutout);
 	const ready = photo?.status === "ready";
 	return (

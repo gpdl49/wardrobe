@@ -14,8 +14,15 @@ struct NewItemView: View {
 	@Environment(\.dismiss) private var dismiss
 
 	@State private var model: NewItemModel
-	@State private var showingCrop = false
 	@State private var selectedPhotosPickerItem: PhotosPickerItem? = nil
+	/// The slot a photo is being taken or chosen for.
+	@State private var pickingSlot: PhotoSlot? = nil
+	@State private var showingSourceDialog = false
+	@State private var croppingSlot: PhotoSlot? = nil
+	@State private var thumbnails: [PhotoSlot: UIImage] = [:]
+
+	private static let tileSize: CGFloat = 84
+	private let cameraAvailable = UIImagePickerController.isSourceTypeAvailable(.camera)
 
 	init(locationId: ID? = nil, ownerId: ID? = nil, onCreated: @escaping (ID) -> Void = { _ in }) {
 		self.locationId = locationId
@@ -44,61 +51,20 @@ struct NewItemView: View {
 						.lineLimit(2...5)
 				}
 
-				Section("Photo") {
-					if let data = model.capturedPhotoData, let uiImage = UIImage(data: data) {
-						VStack(alignment: .leading, spacing: 10) {
-							HStack {
-								Image(uiImage: uiImage)
-									.resizable()
-									.scaledToFit()
-									.frame(maxHeight: 180)
-									.clipShape(RoundedRectangle(cornerRadius: 8))
-
-								Spacer()
-
-								Button { showingCrop = true } label: { Label("Crop", systemImage: "crop") }
-								.buttonStyle(.bordered)
-								.controlSize(.small)
-
-								Button(role: .destructive) {
-									model.capturedPhotoData = nil
-								} label: {
-									Label("Remove", systemImage: "trash")
-								}
-								.buttonStyle(.bordered)
-								.controlSize(.small)
+				Section {
+					ScrollView(.horizontal, showsIndicators: false) {
+						HStack(alignment: .top, spacing: 12) {
+							ForEach(model.slots) { slot in
+								slotTile(slot)
 							}
-
-							Picker("Kind", selection: $model.photoKind) {
-								Text("Main").tag(PhotoKind.main)
-								Text("Label").tag(PhotoKind.label)
-								Text("Detail").tag(PhotoKind.detail)
-							}
-							.pickerStyle(.segmented)
-						}
-						.padding(.vertical, 4)
-					} else {
-						HStack(spacing: 12) {
-							if UIImagePickerController.isSourceTypeAvailable(.camera) {
-								Button {
-									model.showingCamera = true
-								} label: {
-									Label("Take photo", systemImage: "camera")
-										.frame(maxWidth: .infinity)
-								}
-								.buttonStyle(.bordered)
-							}
-
-							Button {
-								model.showingPhotosPicker = true
-							} label: {
-								Label("Choose photo", systemImage: "photo")
-									.frame(maxWidth: .infinity)
-							}
-							.buttonStyle(.bordered)
+							addDetailTile
 						}
 						.padding(.vertical, 4)
 					}
+				} header: {
+					Text("Photos")
+				} footer: {
+					Text("The front becomes the cover. Add the back, the label and any close-ups.")
 				}
 			}
 			.navigationTitle("New item")
@@ -124,14 +90,22 @@ struct NewItemView: View {
 					.disabled(model.isCreating)
 				}
 			}
+			.confirmationDialog(
+				"Add \(pickingSlot?.title.lowercased() ?? "") photo",
+				isPresented: $showingSourceDialog,
+				titleVisibility: .visible
+			) {
+				Button("Take photo") { model.showingCamera = true }
+				Button("Choose from library") { model.showingPhotosPicker = true }
+			}
 			.sheet(isPresented: $model.showingCamera) {
 				CameraPickerView { data in
-					model.capturedPhotoData = data
+					store(data)
 				}
 			}
-			.fullScreenCover(isPresented: $showingCrop) {
-				if let data = model.capturedPhotoData {
-					PhotoCropView(data: data) { model.capturedPhotoData = $0 }
+			.fullScreenCover(item: $croppingSlot) { slot in
+				if let data = model.photos[slot] {
+					PhotoCropView(data: data) { store($0, in: slot) }
 				}
 			}
 			.photosPicker(
@@ -143,7 +117,7 @@ struct NewItemView: View {
 				guard let newItem else { return }
 				Task {
 					if let data = try? await newItem.loadTransferable(type: Data.self) {
-						model.capturedPhotoData = data
+						store(data)
 					}
 					selectedPhotosPickerItem = nil
 				}
@@ -155,6 +129,97 @@ struct NewItemView: View {
 			.errorAlert($model.errorMessage)
 		}
 	}
+
+	// MARK: - Photo slots
+
+	@ViewBuilder
+	private func slotTile(_ slot: PhotoSlot) -> some View {
+		VStack(spacing: 6) {
+			if let thumbnail = thumbnails[slot] {
+				Menu {
+					Button { croppingSlot = slot } label: { Label("Crop", systemImage: "crop") }
+					Button { choose(slot) } label: { Label("Replace", systemImage: "arrow.triangle.2.circlepath.camera") }
+					Button(role: .destructive) { remove(slot) } label: { Label("Remove", systemImage: "trash") }
+				} label: {
+					Image(uiImage: thumbnail)
+						.resizable()
+						.scaledToFill()
+						.frame(width: Self.tileSize, height: Self.tileSize)
+						.clipShape(RoundedRectangle(cornerRadius: 10))
+				}
+				.accessibilityLabel("\(slot.title) photo")
+			} else {
+				Button { choose(slot) } label: {
+					emptyTile(systemImage: "plus")
+				}
+				.buttonStyle(.plain)
+				.accessibilityLabel("Add \(slot.title.lowercased()) photo")
+			}
+			Text(slot.title)
+				.font(.caption)
+				.foregroundStyle(.secondary)
+		}
+	}
+
+	private var addDetailTile: some View {
+		VStack(spacing: 6) {
+			Button { choose(.detail(UUID())) } label: {
+				emptyTile(systemImage: "plus.viewfinder")
+			}
+			.buttonStyle(.plain)
+			.accessibilityLabel("Add detail photo")
+			Text("Add detail")
+				.font(.caption)
+				.foregroundStyle(.secondary)
+		}
+	}
+
+	private func emptyTile(systemImage: String) -> some View {
+		RoundedRectangle(cornerRadius: 10)
+			.strokeBorder(.secondary.opacity(0.5), style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+			.background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+			.frame(width: Self.tileSize, height: Self.tileSize)
+			.overlay {
+				Image(systemName: systemImage)
+					.font(.title2)
+					.foregroundStyle(.secondary)
+			}
+			.contentShape(RoundedRectangle(cornerRadius: 10))
+	}
+
+	/// Starts taking or choosing a photo for `slot`.
+	private func choose(_ slot: PhotoSlot) {
+		pickingSlot = slot
+		if cameraAvailable {
+			showingSourceDialog = true
+		} else {
+			model.showingPhotosPicker = true
+		}
+	}
+
+	/// Puts a new photo in the slot being picked (or `slot`).
+	private func store(_ data: Data, in slot: PhotoSlot? = nil) {
+		guard let slot = slot ?? pickingSlot else { return }
+		model.setPhoto(data, for: slot)
+		thumbnails[slot] = Self.thumbnail(of: data)
+		if slot == pickingSlot { pickingSlot = nil }
+	}
+
+	private func remove(_ slot: PhotoSlot) {
+		model.removePhoto(slot)
+		thumbnails[slot] = nil
+	}
+
+	/// A small decoded copy, so tiles don't redraw full-size photos.
+	private static func thumbnail(of data: Data) -> UIImage? {
+		guard let image = UIImage(data: data) else { return nil }
+		let side = tileSize * 3
+		let scale = side / max(1, min(image.size.width, image.size.height))
+		guard scale < 1 else { return image }
+		let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+		return image.preparingThumbnail(of: size) ?? image
+	}
+
 }
 
 #Preview("New item") {
