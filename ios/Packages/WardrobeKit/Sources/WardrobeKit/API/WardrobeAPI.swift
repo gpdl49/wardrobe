@@ -43,6 +43,7 @@ public protocol WardrobeAPI: Sendable {
 	/// when S3 says the URL expired.
 	func uploadPhoto(_ data: Data, to url: URL, headers: [String: String]) async throws
 	func completePhoto(id: ID) async throws -> PhotoDTO
+	func removePhotoBackground(id: ID) async throws -> PhotoDTO
 	func updatePhoto(id: ID, _ body: UpdatePhotoRequest) async throws -> PhotoDTO
 	func deletePhoto(id: ID) async throws
 	/// Resolves `GET /api/photos/{id}/{variant}`'s 302 without following it.
@@ -97,6 +98,7 @@ public protocol TokenProvider: Sendable {
 
 /// Default implementations allow focused test doubles to implement only their endpoints.
 public extension WardrobeAPI {
+	func removePhotoBackground(id: ID) async throws -> PhotoDTO { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
 	func outfits(_ query: OutfitQuery) async throws -> OutfitListDTO { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
 	func sharedOutfits() async throws -> [OutfitSummaryDTO] { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }
 	func outfit(id: ID) async throws -> OutfitDetailDTO { throw APIError(status: 501, error: "unimplemented", message: "Endpoint not implemented") }

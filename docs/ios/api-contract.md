@@ -129,6 +129,10 @@ Client rules:
 - **Cache**: photo bytes are immutable per `(photoId, variant)`, so the image
   loader caches them on disk (`Caches/photos/<photoId>/<variant>`, LRU,
   500 MB cap) and in memory. Presigned URLs are not cached past 4 minutes.
+- **Remove background** queues an optional job via `POST /api/photos/{id}/background`
+  for a ready main garment photo. While `PhotoDTO.backgroundStatus` is `queued`,
+  poll the item detail. On `ready`, use `cutout-display` and `cutout-thumb` as
+  separate cache variants. On `skipped` or `failed`, show the ordinary photo.
 - **Placeholders**: show the photo's `blurhash` (decoded on device) until the
   thumb loads; `status != ready` shows a progress placeholder and the app polls
   `GET /api/items/{id}` every 2 s (max 60 s) while a photo of an open item is
@@ -172,7 +176,7 @@ production value `2J2LYH5QBS.xyz.vidur.wardrobe`), parsed in `lib/env.ts`.
 |--------|-----------|
 | Sign-in / no access | OIDC; `GET /me` |
 | Catalogue (grid/list, filters, search, wardrobe switcher) | `GET /items` (cursor), `GET /categories`, `GET /tags?owner=`, `GET /locations?owner=`, `GET /shared-with-me` |
-| Item detail / edit | `GET/PATCH/DELETE /items/{id}`, `POST /photos` + PUT + complete, `PATCH/DELETE /photos/{id}`, `GET/POST /items/{id}/analyses`, `POST …/apply` |
+| Item detail / edit | `GET/PATCH/DELETE /items/{id}`, `POST /photos` + PUT + complete, `POST /photos/{id}/background`, `PATCH/DELETE /photos/{id}`, `GET/POST /items/{id}/analyses`, `POST …/apply` |
 | New item | `POST /items` (Idempotency-Key) + photo upload |
 | Locations (tree, filters, archived toggle) | `GET /locations?owner=&kind=&q=&archived=` |
 | Location detail (contents, children, QR label, share) | `GET /locations/{id}`, `PATCH/DELETE /locations/{id}`, `POST /locations`, `POST /items/move` |

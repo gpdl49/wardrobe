@@ -1,7 +1,9 @@
+import { readFile } from "node:fs/promises";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import {
 	DISPLAY_EDGE,
+	renderCutoutRenditions,
 	renderRenditions,
 	THUMB_EDGE,
 	UnsupportedImageError,
@@ -61,6 +63,55 @@ describe("renderRenditions", () => {
 		// 4x3 components: 1 size char + 4 DC + 2 * (4*3 - 1) AC chars + 1 max = 28.
 		expect(out.blurhash).toMatch(/^[0-9A-Za-z#$%*+,\-.:;=?@[\]^_{|}~]{28}$/);
 	});
+
+	it("keeps a main photo with an uncertain mask opaque", async () => {
+		const plain = await sharp({
+			create: { width: 320, height: 320, channels: 3, background: "#eee" },
+		})
+			.png()
+			.toBuffer();
+		await expect(renderCutoutRenditions(plain)).resolves.toBeNull();
+	});
+
+	it("keeps existing transparency", async () => {
+		const transparent = await sharp({
+			create: {
+				width: 64,
+				height: 64,
+				channels: 4,
+				background: { r: 220, g: 225, b: 230, alpha: 0.5 },
+			},
+		})
+			.png()
+			.toBuffer();
+		await expect(renderCutoutRenditions(transparent)).resolves.toBeNull();
+		const { display } = await renderRenditions(transparent);
+		const rgba = await sharp(display).raw().toBuffer();
+		expect(rgba[3]).toBe(128);
+	});
+
+	it("makes a white backdrop transparent around a white shirt", async () => {
+		// Paulinaela, CC0, https://commons.wikimedia.org/wiki/File:White-tshirt.jpg
+		const original = await readFile(
+			new URL("../../test/fixtures/white-shirt.jpg", import.meta.url),
+		);
+		const cutout = await renderCutoutRenditions(original);
+		expect(cutout).not.toBeNull();
+		if (!cutout) throw new Error("Expected a cutout");
+		for (const image of [cutout.display, cutout.thumb]) {
+			const { data, info } = await sharp(image)
+				.raw()
+				.toBuffer({ resolveWithObject: true });
+			expect(info.channels).toBe(4);
+			expect(data[3]).toBe(0);
+			const center =
+				(Math.floor(info.height / 2) * info.width +
+					Math.floor(info.width / 2)) *
+				4;
+			expect(data[center + 3]).toBe(255);
+			expect(data[center]).toBeGreaterThan(200);
+		}
+	}, 15_000);
 
 	it("rejects undecodable input as unsupported", async () => {
 		await expect(

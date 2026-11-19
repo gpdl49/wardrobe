@@ -24,3 +24,6 @@ mise.local.toml
 
 # prisma generate (see prisma/schema.prisma)
 /lib/generated/
+
+# checksum-pinned photo model (mise run setup)
+/models/

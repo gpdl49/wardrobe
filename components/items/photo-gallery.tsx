@@ -23,11 +23,15 @@ export function PhotoGallery({
 	coverPhotoId,
 	alt,
 	onSetCover,
+	onRemoveBackground,
+	requestingBackgroundFor,
 }: {
 	photos: PhotoDto[];
 	coverPhotoId?: string | null;
 	alt: string;
 	onSetCover?: (photoId: string) => void;
+	onRemoveBackground?: (photoId: string) => void;
+	requestingBackgroundFor?: string;
 }) {
 	const scroller = useRef<HTMLDivElement>(null);
 	const [index, setIndex] = useState(0);
@@ -61,6 +65,11 @@ export function PhotoGallery({
 	}
 
 	const current = photos[index];
+	const canRemove =
+		onRemoveBackground &&
+		current?.access !== "view" &&
+		current?.kind === "main" &&
+		current.status === "ready";
 	return (
 		<div className="flex flex-col gap-2">
 			<section
@@ -148,6 +157,36 @@ export function PhotoGallery({
 					</Button>
 				) : null}
 			</section>
+			{canRemove && current ? (
+				<div className="flex items-center gap-3 text-sm">
+					{current.backgroundStatus === "ready" ? (
+						<a className="text-muted underline" href={current.urls.original}>
+							View original
+						</a>
+					) : current.backgroundStatus === "skipped" ? (
+						<span role="status" className="text-muted">
+							Couldn’t isolate the garment
+						</span>
+					) : (
+						<Button
+							variant="secondary"
+							size="sm"
+							disabled={
+								current.backgroundStatus === "queued" ||
+								requestingBackgroundFor === current.id
+							}
+							onClick={() => onRemoveBackground(current.id)}
+						>
+							{current.backgroundStatus === "queued" ||
+							requestingBackgroundFor === current.id
+								? "Removing background…"
+								: current.backgroundStatus === "failed"
+									? "Retry background removal"
+									: "Remove background"}
+						</Button>
+					)}
+				</div>
+			) : null}
 			{photos.length > 1 ? (
 				<div className="no-scrollbar flex gap-2 overflow-x-auto">
 					{photos.map((photo, i) => (

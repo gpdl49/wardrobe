@@ -33,6 +33,7 @@ final class ItemDetailModel {
 	var showingKindSelection: Bool = false
 	var selectedKind: PhotoKind = .main
 	var photoToDelete: PhotoDTO? = nil
+	private(set) var requestingBackgroundFor: Set<ID> = []
 
 	// Polling
 	private(set) var pollTask: Task<Void, Never>? = nil
@@ -98,9 +99,7 @@ final class ItemDetailModel {
 
 	func startPollingIfNeeded() {
 		guard pollTask == nil else { return }
-		guard let item, item.photos.contains(where: { $0.status == .pending || $0.status == .processing }) else {
-			return
-		}
+		guard hasPendingPhotos else { return }
 
 		pollTask = Task { [weak self] in
 			var elapsed: TimeInterval = 0
@@ -115,12 +114,28 @@ final class ItemDetailModel {
 				guard let self else { break }
 				await self.refresh()
 
-				let stillProcessing = self.item?.photos.contains(where: { $0.status == .pending || $0.status == .processing }) ?? false
-				if !stillProcessing {
+				if !self.hasPendingPhotos {
 					break
 				}
 			}
 			self?.pollTask = nil
+		}
+	}
+
+	private var hasPendingPhotos: Bool {
+		item?.photos.contains {
+			$0.status == .pending || $0.status == .processing || $0.backgroundStatus == .queued
+		} ?? false
+	}
+
+	func removePhotoBackground(photoId: ID) async {
+		guard requestingBackgroundFor.insert(photoId).inserted else { return }
+		defer { requestingBackgroundFor.remove(photoId) }
+		do {
+			_ = try await api.removePhotoBackground(id: photoId)
+			await refresh()
+		} catch {
+			errorMessage = userFacingAPIError(error, appModel: appModel)
 		}
 	}
 

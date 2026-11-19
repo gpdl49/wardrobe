@@ -23,10 +23,11 @@ Needs Node 24 and aube. With [mise](https://mise.jdx.dev):
 
 ```sh
 mise install
-mise run setup              # aube install + hk install (git hooks)
+mise run setup              # dependencies, photo model and Git hooks
 ```
 
-Without mise: install Node 24 and aube, then `aube install` and `hk install`.
+Without mise, install Node 24, aube and hk. Run `aube install`,
+`node scripts/fetch-photo-model.mjs` and `hk install`.
 
 ```sh
 cp .env.example .env        # AUTH_MODE=dev, local Postgres and MinIO

@@ -4,6 +4,7 @@
 node_modules
 coverage
 lib/generated
+models
 .env*
 *.md
 compose.yaml

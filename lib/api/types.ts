@@ -17,6 +17,7 @@ export type ItemStatus = "active" | "stored" | "lent" | "donated" | "discarded";
 export type PhotoKind = "main" | "label" | "detail" | "outfit";
 export type PhotoStatus = "pending" | "processing" | "ready" | "failed";
 export type PhotoVariant = "original" | "display" | "thumb";
+export type PhotoBackgroundStatus = "queued" | "ready" | "skipped" | "failed";
 export type SessionMode = "pack" | "unpack";
 export type AnalysisKind = "colors" | "vision";
 export type AnalysisStatus = "queued" | "running" | "done" | "failed";
@@ -92,6 +93,7 @@ export interface ItemColor {
 }
 
 export interface PhotoDto {
+	backgroundStatus?: PhotoBackgroundStatus | null;
 	id: string;
 	ownerId: string;
 	access: Access;

@@ -62,25 +62,35 @@ export function Photo({
 	fit?: "cover" | "contain";
 	priority?: boolean;
 }) {
-	const [loaded, setLoaded] = useState(false);
-	const [failed, setFailed] = useState(false);
+	const [loadedSrc, setLoadedSrc] = useState<string>();
+	const [failedSrc, setFailedSrc] = useState<string>();
+	const src = photo?.urls[variant];
+	const loaded = Boolean(src && src === loadedSrc);
+	const failed = Boolean(src && src === failedSrc);
+	const showBlurhash = !(
+		loaded &&
+		photo?.kind === "main" &&
+		photo.backgroundStatus === "ready"
+	);
 	const ready = photo?.status === "ready";
 	return (
 		<div
 			className={cn("relative overflow-hidden bg-sunken", className)}
 			data-photo-status={photo?.status ?? "none"}
 		>
-			{photo?.blurhash ? <Blurhash hash={photo.blurhash} /> : null}
+			{showBlurhash && photo?.blurhash ? (
+				<Blurhash hash={photo.blurhash} />
+			) : null}
 			{ready && !failed ? (
 				// biome-ignore lint/performance/noImgElement: variants are 302 redirects to presigned S3 URLs, which next/image cannot optimise or cache.
 				<img
-					src={photo.urls[variant]}
+					src={src}
 					alt={alt}
 					loading={priority ? "eager" : "lazy"}
 					decoding="async"
 					draggable={false}
-					onLoad={() => setLoaded(true)}
-					onError={() => setFailed(true)}
+					onLoad={() => setLoadedSrc(src)}
+					onError={() => setFailedSrc(src)}
 					className={cn(
 						"absolute inset-0 size-full transition-opacity duration-300",
 						fit === "cover" ? "object-cover" : "object-contain",

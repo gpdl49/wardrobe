@@ -35,6 +35,7 @@ import {
 	useCategories,
 	useDeleteItem,
 	useItem,
+	useRemovePhotoBackground,
 	useUpdateItem,
 } from "@/lib/client/queries";
 import { ItemForm } from "./item-form";
@@ -67,6 +68,7 @@ function ItemView({ item }: { item: ItemDetailDto }) {
 	const [editing, setEditing] = useState(false);
 	const remove = useDeleteItem();
 	const update = useUpdateItem(item.id);
+	const removeBackground = useRemovePhotoBackground(item.id);
 	const title = itemTitle(item);
 	const canEdit = item.access !== "view";
 	const photos = [...item.photos].sort((a, b) =>
@@ -129,6 +131,14 @@ function ItemView({ item }: { item: ItemDetailDto }) {
 						photos={photos}
 						alt={title}
 						coverPhotoId={item.coverPhoto?.id}
+						onRemoveBackground={
+							canEdit ? (id) => removeBackground.mutate(id) : undefined
+						}
+						requestingBackgroundFor={
+							removeBackground.isPending
+								? removeBackground.variables
+								: undefined
+						}
 						onSetCover={
 							canEdit
 								? (coverPhotoId) => update.mutate({ coverPhotoId })
@@ -136,6 +146,7 @@ function ItemView({ item }: { item: ItemDetailDto }) {
 						}
 					/>
 					<ErrorText error={update.error} className="mt-2" />
+					<ErrorText error={removeBackground.error} className="mt-2" />
 				</div>
 				<div className="flex min-w-0 flex-col gap-6">
 					{canEdit && editing ? (

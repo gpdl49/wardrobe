@@ -1,5 +1,6 @@
 import { encode as encodeBlurhash } from "blurhash";
 import sharp, { type Metadata, type OutputInfo } from "sharp";
+import { removePhotoBackground } from "@/lib/photos/background";
 
 /**
  * Pure image work for the `photo.renditions` job: decode an original, apply
@@ -38,9 +39,11 @@ export type Renditions = {
 	blurhash: string;
 };
 
-export async function renderRenditions(input: Uint8Array): Promise<Renditions> {
+type RawPhoto = { data: Buffer; info: OutputInfo };
+
+async function decodePhoto(input: Uint8Array) {
 	let metadata: Metadata;
-	let oriented: { data: Buffer; info: OutputInfo };
+	let oriented: RawPhoto;
 	try {
 		metadata = await sharp(input).metadata();
 		// Decode once at display size (oriented, sRGB); the rest derives from it.
@@ -60,24 +63,39 @@ export async function renderRenditions(input: Uint8Array): Promise<Renditions> {
 		);
 	}
 
-	const raw = {
-		raw: {
-			width: oriented.info.width,
-			height: oriented.info.height,
-			channels: oriented.info.channels,
-		},
-	} as const;
+	return { metadata, oriented };
+}
 
-	const [display, thumb, small] = await Promise.all([
-		sharp(oriented.data, raw).webp({ quality: 82 }).toBuffer(),
-		sharp(oriented.data, raw)
+function source(image: RawPhoto) {
+	const { width, height, channels } = image.info;
+	return sharp(image.data, { raw: { width, height, channels } });
+}
+
+async function encodeWebps(photo: RawPhoto) {
+	const [display, thumb] = await Promise.all([
+		source(photo).webp({ quality: 82 }).toBuffer(),
+		source(photo)
 			.resize(THUMB_EDGE, THUMB_EDGE, {
 				fit: "inside",
 				withoutEnlargement: true,
 			})
 			.webp({ quality: 75 })
 			.toBuffer(),
-		sharp(oriented.data, raw)
+	]);
+	return { display, thumb };
+}
+
+export async function renderCutoutRenditions(input: Uint8Array) {
+	const { oriented } = await decodePhoto(input);
+	const cutout = await removePhotoBackground(oriented);
+	return cutout ? encodeWebps(cutout) : null;
+}
+
+export async function renderRenditions(input: Uint8Array): Promise<Renditions> {
+	const { metadata, oriented } = await decodePhoto(input);
+	const [renditions, small] = await Promise.all([
+		encodeWebps(oriented),
+		source(oriented)
 			.resize(BLURHASH_EDGE, BLURHASH_EDGE, { fit: "inside" })
 			.ensureAlpha()
 			.raw()
@@ -94,8 +112,7 @@ export async function renderRenditions(input: Uint8Array): Promise<Renditions> {
 	);
 
 	return {
-		display,
-		thumb,
+		...renditions,
 		width: metadata.autoOrient?.width ?? oriented.info.width,
 		height: metadata.autoOrient?.height ?? oriented.info.height,
 		blurhash,

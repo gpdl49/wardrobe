@@ -8,8 +8,8 @@ jactionlint = "2.5.0"
 xcodegen = "2.46.0"
 
 [tasks.setup]
-description = "Install dependencies and configure git hooks"
-run = "aube install && hk install"
+description = "Install dependencies and the photo model, then configure git hooks"
+run = "aube install && node scripts/fetch-photo-model.mjs && hk install"
 
 # iOS app (ios/, docs/ios/). Simulator names match Xcode 27's iOS 26.5 runtime.
 [tasks."ios:generate"]

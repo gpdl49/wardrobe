@@ -314,6 +314,13 @@ struct ItemDetailView: View {
 				}
 			}
 
+			if vm.canEdit, vm.sortedPhotos.indices.contains(vm.selectedPhotoIndex) {
+				let photo = vm.sortedPhotos[vm.selectedPhotoIndex]
+				if photo.access.canEdit && photo.kind == .main && photo.status == .ready {
+					photoBackgroundButton(photo: photo, vm: vm)
+				}
+			}
+
 			// Add photo buttons
 			if vm.canEdit {
 				HStack(spacing: 12) {
@@ -337,6 +344,22 @@ struct ItemDetailView: View {
 				}
 				.padding(.top, 4)
 			}
+		}
+	}
+
+	@ViewBuilder
+	private func photoBackgroundButton(photo: PhotoDTO, vm: ItemDetailModel) -> some View {
+		if photo.backgroundStatus == .queued || vm.requestingBackgroundFor.contains(photo.id) {
+			ProgressView("Removing background…").font(.subheadline)
+		} else if photo.backgroundStatus == .skipped {
+			Text("Couldn’t isolate the garment").font(.subheadline).foregroundStyle(.secondary)
+		} else if photo.backgroundStatus != .ready {
+			Button {
+				Task { await vm.removePhotoBackground(photoId: photo.id) }
+			} label: {
+				Label(photo.backgroundStatus == .failed ? "Retry background removal" : "Remove background", systemImage: "scissors")
+			}
+			.buttonStyle(.bordered)
 		}
 	}
 

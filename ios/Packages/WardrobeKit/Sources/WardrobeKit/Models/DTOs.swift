@@ -138,6 +138,7 @@ public struct PhotoDTO: Codable, Hashable, Sendable, Identifiable {
 	public var outfitId: ID?
 	public var kind: PhotoKind
 	public var status: PhotoStatus
+	public var backgroundStatus: PhotoBackgroundStatus?
 	public var contentType: String
 	public var size: Int
 	public var width: Int?
@@ -152,13 +153,23 @@ public struct PhotoDTO: Codable, Hashable, Sendable, Identifiable {
 		id: ID, ownerId: ID, access: Access, itemId: ID?, outfitId: ID? = nil, kind: PhotoKind,
 		status: PhotoStatus, contentType: String, size: Int, width: Int? = nil,
 		height: Int? = nil, blurhash: String? = nil, createdAt: Date,
-		urls: [String: String] = [:]
+		urls: [String: String] = [:], backgroundStatus: PhotoBackgroundStatus? = nil
 	) {
 		self.id = id; self.ownerId = ownerId; self.access = access
 		self.itemId = itemId; self.outfitId = outfitId; self.kind = kind; self.status = status
 		self.contentType = contentType; self.size = size; self.width = width
 		self.height = height; self.blurhash = blurhash; self.createdAt = createdAt
 		self.urls = urls
+		self.backgroundStatus = backgroundStatus
+	}
+
+	public func rendition(_ variant: PhotoVariant) -> PhotoVariant {
+		guard kind == .main, backgroundStatus == .ready else { return variant }
+		switch variant {
+		case .display: return .cutoutDisplay
+		case .thumb: return .cutoutThumb
+		default: return variant
+		}
 	}
 }
 

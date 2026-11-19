@@ -1,6 +1,7 @@
 import type { JobDefinition } from "@/lib/jobs/define";
 import { analysisColors } from "@/lib/jobs/definitions/analysis-colors";
 import { analysisVision } from "@/lib/jobs/definitions/analysis-vision";
+import { photoBackground } from "@/lib/jobs/definitions/photo-background";
 import { photoRenditions } from "@/lib/jobs/definitions/photo-renditions";
 import { suggestionRun } from "@/lib/jobs/definitions/suggestion-run";
 import { systemPing } from "@/lib/jobs/definitions/system-ping";
@@ -9,6 +10,7 @@ import { systemPing } from "@/lib/jobs/definitions/system-ping";
 export const jobDefinitions: readonly JobDefinition[] = [
 	systemPing,
 	photoRenditions,
+	photoBackground,
 	analysisColors,
 	analysisVision,
 	suggestionRun,

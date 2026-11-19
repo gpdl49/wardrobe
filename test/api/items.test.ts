@@ -447,6 +447,8 @@ describeWithDb("items API", () => {
 				`photos/${photo.id}/original`,
 				`photos/${photo.id}/display.webp`,
 				`photos/${photo.id}/thumb.webp`,
+				`photos/${photo.id}/cutout-display.webp`,
+				`photos/${photo.id}/cutout-thumb.webp`,
 			]);
 		});
 

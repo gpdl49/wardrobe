@@ -12,6 +12,7 @@ describe("toPhotoDto", () => {
 				outfitId: null,
 				kind: "main",
 				status: "ready",
+				backgroundStatus: null,
 				contentType: "image/jpeg",
 				size: 10,
 				width: 1,

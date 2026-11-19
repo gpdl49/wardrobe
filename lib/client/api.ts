@@ -492,6 +492,8 @@ export function createApiClient(options: ApiClientOptions = {}) {
 			put: putObject,
 			complete: (id: string) =>
 				request<PhotoDto>("POST", `/photos/${enc(id)}/complete`),
+			removeBackground: (id: string) =>
+				request<PhotoDto>("POST", `/photos/${enc(id)}/background`),
 			/** Assign a photo to an item (or unassign with null) or change its kind. */
 			update: (
 				id: string,

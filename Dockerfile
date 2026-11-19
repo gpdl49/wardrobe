@@ -23,6 +23,8 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc prisma.config.ts ./
 COPY prisma ./prisma
 RUN CI=true aube install --frozen-lockfile
+COPY scripts/fetch-photo-model.mjs ./scripts/
+RUN node scripts/fetch-photo-model.mjs
 
 # Production dependencies only: the runtime needs the Prisma CLI (with its
 # schema engine) for `migrate deploy` and pg for the seed.
@@ -58,6 +60,7 @@ COPY --from=builder /app/.next/standalone ./
 # Standalone tracing only keeps what server.js imports; the entrypoint also
 # needs the Prisma CLI and pg, so overlay the full production install.
 COPY --from=prod-deps /app/node_modules ./node_modules
+COPY --from=deps /app/models ./models
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma

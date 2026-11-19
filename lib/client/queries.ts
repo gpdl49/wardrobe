@@ -100,7 +100,12 @@ export function useItems(query: ItemsQuery) {
 
 const isPending = (item: ItemDetailDto) =>
 	item.analyses.some((a) => a.status === "queued" || a.status === "running") ||
-	item.photos.some((p) => p.status === "pending" || p.status === "processing");
+	item.photos.some(
+		(p) =>
+			p.status === "pending" ||
+			p.status === "processing" ||
+			p.backgroundStatus === "queued",
+	);
 
 export function useItem(id: string) {
 	return useQuery({
@@ -109,6 +114,15 @@ export function useItem(id: string) {
 		// Poll while renditions or analyses are still being worked on.
 		refetchInterval: (query) =>
 			query.state.data && isPending(query.state.data) ? 3000 : false,
+	});
+}
+
+export function useRemovePhotoBackground(itemId: string) {
+	const client = useQueryClient();
+	return useMutation({
+		mutationFn: api.photos.removeBackground,
+		onSuccess: () =>
+			client.invalidateQueries({ queryKey: queryKeys.item(itemId) }),
 	});
 }
 
