@@ -132,7 +132,9 @@ Client rules:
 - **Remove background** queues an optional job via `POST /api/photos/{id}/background`
   for a ready main garment photo. While `PhotoDTO.backgroundStatus` is `queued`,
   poll the item detail. On `ready`, use `cutout-display` and `cutout-thumb` as
-  separate cache variants. On `skipped` or `failed`, show the ordinary photo.
+  separate cache variants. Cutouts are cropped to the garment at 4:5 with a
+  margin, so draw them aspect-fit (never fill). On `skipped` or `failed`,
+  show the ordinary photo.
 - **Placeholders**: show the photo's `blurhash` (decoded on device) until the
   thumb loads; `status != ready` shows a progress placeholder and the app polls
   `GET /api/items/{id}` every 2 s (max 60 s) while a photo of an open item is

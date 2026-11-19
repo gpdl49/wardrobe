@@ -71,9 +71,10 @@ struct RemotePhotoView: View {
 							.tint(.secondary)
 					case .ready:
 						if let loadedData, let image = platformImage(from: loadedData) {
+							// Cutouts are cropped to the garment: show all of it.
 							image
 								.resizable()
-								.aspectRatio(contentMode: contentMode)
+								.aspectRatio(contentMode: showingCutout ? .fit : contentMode)
 								.frame(width: geometry.size.width, height: geometry.size.height)
 								.clipped()
 								.transition(.opacity.animation(.easeInOut(duration: 0.25)))
