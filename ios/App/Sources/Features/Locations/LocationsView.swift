@@ -40,6 +40,7 @@ public struct LocationsView: View {
 				get: { locationsModel?.searchText ?? "" },
 				set: { locationsModel?.searchText = $0 }
 			),
+			placement: UIDevice.current.userInterfaceIdiom == .pad ? .navigationBarDrawer(displayMode: .always) : .automatic,
 			prompt: "Search code, name, or notes"
 		)
 		.toolbar {
@@ -164,6 +165,11 @@ public struct LocationsView: View {
 
 	@ToolbarContentBuilder
 	private var toolbarContent: some ToolbarContent {
+		if UIDevice.current.userInterfaceIdiom == .pad, canCreate {
+			ToolbarItem(placement: .topBarLeading) {
+				newLocationButton
+			}
+		}
 		ToolbarItem(placement: .topBarLeading) {
 			WardrobeSwitcher()
 		}
@@ -177,13 +183,17 @@ public struct LocationsView: View {
 				Label("Scan QR", systemImage: "qrcode.viewfinder")
 			}
 
-			if canCreate {
-				Button {
-					showingCreateSheet = true
-				} label: {
-					Label("New Location", systemImage: "plus")
-				}
+			if UIDevice.current.userInterfaceIdiom != .pad, canCreate {
+				newLocationButton
 			}
+		}
+	}
+
+	private var newLocationButton: some View {
+		Button {
+			showingCreateSheet = true
+		} label: {
+			Label("New Location", systemImage: "plus")
 		}
 	}
 
@@ -212,6 +222,7 @@ public struct LocationsView: View {
 			let isFiltered = (locationsModel?.selectedKind != nil) || (locationsModel?.showArchived == true)
 			Image(systemName: isFiltered ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
 		}
+		.accessibilityLabel("Location filters")
 	}
 
 	// MARK: - Scan Handler
