@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { env, InferenceSession, Tensor } from "onnxruntime-web/wasm";
 import sharp, { type OutputInfo } from "sharp";
+import { type Frame, garmentFrame } from "@/lib/photos/frame";
 
 const EDGE = 320;
 const PIXELS = EDGE * EDGE;
@@ -99,7 +100,30 @@ async function foregroundMask(rgb: Buffer): Promise<Buffer | null> {
 	return solid >= PIXELS * 0.04 && clear >= PIXELS * 0.12 ? alpha : null;
 }
 
-/** Best-effort cutout of one garment photographed on a light neutral backdrop. */
+/** Crops to `frame`, padding with transparency where it leaves the image. */
+async function cropToFrame(photo: RawPhoto, frame: Frame): Promise<RawPhoto> {
+	const { width, height } = photo.info;
+	const left = Math.max(0, frame.left);
+	const top = Math.max(0, frame.top);
+	const right = Math.min(width, frame.left + frame.width);
+	const bottom = Math.min(height, frame.top + frame.height);
+	return sharp(photo.data, { raw: { width, height, channels: 4 } })
+		.extract({ left, top, width: right - left, height: bottom - top })
+		.extend({
+			left: left - frame.left,
+			top: top - frame.top,
+			right: frame.left + frame.width - right,
+			bottom: frame.top + frame.height - bottom,
+			background: { r: 0, g: 0, b: 0, alpha: 0 },
+		})
+		.raw()
+		.toBuffer({ resolveWithObject: true });
+}
+
+/**
+ * Best-effort cutout of one garment photographed on a light neutral backdrop,
+ * auto-cropped to the garment (lib/photos/frame).
+ */
 export async function removePhotoBackground(
 	photo: RawPhoto,
 ): Promise<RawPhoto | null> {
@@ -130,8 +154,10 @@ export async function removePhotoBackground(
 		rgba[output + 2] = photo.data[input + 2] as number;
 		rgba[output + 3] = mask[i] as number;
 	}
-	return {
+	const cutout = {
 		data: rgba,
-		info: { ...photo.info, channels: 4, size: rgba.length },
+		info: { ...photo.info, channels: 4 as const, size: rgba.length },
 	};
+	const frame = garmentFrame(alpha, EDGE, EDGE, width, height);
+	return frame ? cropToFrame(cutout, frame) : cutout;
 }

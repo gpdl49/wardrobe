@@ -16,6 +16,11 @@ import { removePhotoBackground } from "@/lib/photos/background";
 
 export const DISPLAY_EDGE = 1600;
 export const THUMB_EDGE = 400;
+/**
+ * Cutouts decode at the browser upload size (lib/client/upload/resize), so
+ * cropping to the garment keeps detail before the display resize.
+ */
+const CUTOUT_SOURCE_EDGE = 2400;
 const BLURHASH_EDGE = 32;
 
 // One small pod: no libvips operation cache, and limit decode concurrency.
@@ -41,18 +46,15 @@ export type Renditions = {
 
 type RawPhoto = { data: Buffer; info: OutputInfo };
 
-async function decodePhoto(input: Uint8Array) {
+async function decodePhoto(input: Uint8Array, edge = DISPLAY_EDGE) {
 	let metadata: Metadata;
 	let oriented: RawPhoto;
 	try {
 		metadata = await sharp(input).metadata();
-		// Decode once at display size (oriented, sRGB); the rest derives from it.
+		// Decode once (oriented, sRGB, within `edge`); the rest derives from it.
 		oriented = await sharp(input, { failOn: "error" })
 			.autoOrient()
-			.resize(DISPLAY_EDGE, DISPLAY_EDGE, {
-				fit: "inside",
-				withoutEnlargement: true,
-			})
+			.resize(edge, edge, { fit: "inside", withoutEnlargement: true })
 			.toColourspace("srgb")
 			.raw()
 			.toBuffer({ resolveWithObject: true });
@@ -73,7 +75,13 @@ function source(image: RawPhoto) {
 
 async function encodeWebps(photo: RawPhoto) {
 	const [display, thumb] = await Promise.all([
-		source(photo).webp({ quality: 82 }).toBuffer(),
+		source(photo)
+			.resize(DISPLAY_EDGE, DISPLAY_EDGE, {
+				fit: "inside",
+				withoutEnlargement: true,
+			})
+			.webp({ quality: 82 })
+			.toBuffer(),
 		source(photo)
 			.resize(THUMB_EDGE, THUMB_EDGE, {
 				fit: "inside",
@@ -86,7 +94,7 @@ async function encodeWebps(photo: RawPhoto) {
 }
 
 export async function renderCutoutRenditions(input: Uint8Array) {
-	const { oriented } = await decodePhoto(input);
+	const { oriented } = await decodePhoto(input, CUTOUT_SOURCE_EDGE);
 	const cutout = await removePhotoBackground(oriented);
 	return cutout ? encodeWebps(cutout) : null;
 }

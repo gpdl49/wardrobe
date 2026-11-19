@@ -67,11 +67,8 @@ export function Photo({
 	const src = photo?.urls[variant];
 	const loaded = Boolean(src && src === loadedSrc);
 	const failed = Boolean(src && src === failedSrc);
-	const showBlurhash = !(
-		loaded &&
-		photo?.kind === "main" &&
-		photo.backgroundStatus === "ready"
-	);
+	const cutout = photo?.kind === "main" && photo.backgroundStatus === "ready";
+	const showBlurhash = !(loaded && cutout);
 	const ready = photo?.status === "ready";
 	return (
 		<div
@@ -93,7 +90,8 @@ export function Photo({
 					onError={() => setFailedSrc(src)}
 					className={cn(
 						"absolute inset-0 size-full transition-opacity duration-300",
-						fit === "cover" ? "object-cover" : "object-contain",
+						// Cutouts are cropped to the garment: show all of it.
+						fit === "cover" && !cutout ? "object-cover" : "object-contain",
 						loaded ? "opacity-100" : "opacity-0",
 						imgClassName,
 					)}

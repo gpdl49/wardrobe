@@ -95,6 +95,7 @@ describe("renderRenditions", () => {
 		const original = await readFile(
 			new URL("../../test/fixtures/white-shirt.jpg", import.meta.url),
 		);
+		const source = await sharp(original).metadata();
 		const cutout = await renderCutoutRenditions(original);
 		expect(cutout).not.toBeNull();
 		if (!cutout) throw new Error("Expected a cutout");
@@ -103,6 +104,12 @@ describe("renderRenditions", () => {
 				.raw()
 				.toBuffer({ resolveWithObject: true });
 			expect(info.channels).toBe(4);
+			// Auto-cropped to the shirt at the catalogue tile's 4:5.
+			expect(info.width / info.height).toBeCloseTo(4 / 5, 2);
+			expect(info.height).toBeLessThanOrEqual(DISPLAY_EDGE);
+			expect(info.width * info.height).toBeLessThan(
+				(source.width ?? 0) * (source.height ?? 0),
+			);
 			expect(data[3]).toBe(0);
 			const center =
 				(Math.floor(info.height / 2) * info.width +
