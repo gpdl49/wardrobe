@@ -87,6 +87,42 @@ final class FixtureNavigationTests: XCTestCase {
 		app.buttons["Cancel"].tap()
 	}
 
+	@MainActor func testIPadAddButtonsStayLeftOfToolbarActions() throws {
+		try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad)
+		let app = XCUIApplication()
+		app.launchArguments = ["-fixtures"]
+		app.launch()
+		defer { XCUIDevice.shared.orientation = .portrait }
+
+		for orientation in [UIDeviceOrientation.portrait, .landscapeLeft] {
+			XCUIDevice.shared.orientation = orientation
+			XCTAssertTrue(app.staticTexts["Navy cardigan"].waitForExistence(timeout: 30))
+			checkAddButton("Add new item", rightActions: ["Switch to list view", "Filters"],
+				sheetTitle: "New item", in: app)
+
+			selectTab("Locations", in: app)
+			checkAddButton("New Location", rightActions: ["Location filters", "Scan QR"],
+				sheetTitle: "New Location", in: app)
+			selectTab("Catalogue", in: app)
+		}
+	}
+
+	@MainActor private func checkAddButton(
+		_ label: String, rightActions: [String], sheetTitle: String, in app: XCUIApplication
+	) {
+		let addButton = app.navigationBars.buttons[label].firstMatch
+		XCTAssertTrue(addButton.waitForExistence(timeout: 10))
+		XCTAssertTrue(addButton.isHittable)
+		for label in rightActions {
+			let action = app.navigationBars.buttons[label].firstMatch
+			XCTAssertTrue(action.isHittable, "\(label) should be directly tappable")
+			XCTAssertLessThan(addButton.frame.maxX, action.frame.minX)
+		}
+		addButton.tap()
+		XCTAssertTrue(app.navigationBars[sheetTitle].waitForExistence(timeout: 10))
+		app.buttons["Cancel"].tap()
+	}
+
 	@MainActor func testPackingAndUnpackingScreens() {
 		let app = XCUIApplication()
 		app.launchArguments = ["-fixtures"]

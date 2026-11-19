@@ -28,6 +28,11 @@ struct CatalogueView: View {
 		.navigationTitle(appModel.scopes.count > 1 ? "" : "Catalogue")
 		.navigationBarTitleDisplayMode(.inline)
 		.toolbar {
+			if UIDevice.current.userInterfaceIdiom == .pad, canAddItem {
+				ToolbarItem(placement: .topBarLeading) {
+					addItemButton
+				}
+			}
 			ToolbarItem(placement: .topBarLeading) {
 				WardrobeSwitcher()
 			}
@@ -57,13 +62,8 @@ struct CatalogueView: View {
 				}
 				.accessibilityLabel("Filters")
 
-				if appModel.scope?.access.canEdit ?? true {
-					Button {
-						showNewItemSheet = true
-					} label: {
-						Image(systemName: "plus")
-					}
-					.accessibilityLabel("Add new item")
+				if UIDevice.current.userInterfaceIdiom != .pad, canAddItem {
+					addItemButton
 				}
 			}
 		}
@@ -103,6 +103,18 @@ struct CatalogueView: View {
 		}
 	}
 
+	private var canAddItem: Bool {
+		appModel.scope?.access.canEdit ?? true
+	}
+
+	private var addItemButton: some View {
+		Button {
+			showNewItemSheet = true
+		} label: {
+			Label("Add new item", systemImage: "plus")
+		}
+	}
+
 	@ViewBuilder
 	private func catalogueContent(_ model: CatalogueModel) -> some View {
 		@Bindable var bindableModel = model
@@ -122,7 +134,11 @@ struct CatalogueView: View {
 				itemsListView(model)
 			}
 		}
-		.searchable(text: $bindableModel.searchText, prompt: "Search clothes, brands, tags…")
+		.searchable(
+			text: $bindableModel.searchText,
+			placement: UIDevice.current.userInterfaceIdiom == .pad ? .navigationBarDrawer(displayMode: .always) : .automatic,
+			prompt: "Search clothes, brands, tags…"
+		)
 		.refreshable {
 			await model.reload()
 		}
