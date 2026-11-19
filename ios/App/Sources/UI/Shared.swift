@@ -7,7 +7,8 @@ import WardrobeKit
 extension LocationKind {
 	var label: String {
 		switch self {
-		case .bag: "Vacuum bag"
+		case .bag: "Bag"
+		case .vacuumBag: "Vacuum bag"
 		case .suitcase: "Suitcase"
 		case .closet: "Closet"
 		case .drawer: "Drawer"
@@ -17,7 +18,7 @@ extension LocationKind {
 	}
 	var symbolName: String {
 		switch self {
-		case .bag: "bag"
+		case .bag, .vacuumBag: "bag"
 		case .suitcase: "suitcase"
 		case .closet: "cabinet"
 		case .drawer: "archivebox"

@@ -8,6 +8,7 @@ import {
 describe("nextFreeCode", () => {
 	it("starts at 01", () => {
 		expect(nextFreeCode([], "bag")).toBe("B-01");
+		expect(nextFreeCode(["B-07", "V-02", "S-09"], "vacuum_bag")).toBe("V-03");
 		expect(nextFreeCode(["CL-BEDROOM"], "suitcase")).toBe("S-01");
 	});
 
@@ -31,6 +32,7 @@ describe("nextFreeCode", () => {
 describe("kindForCode", () => {
 	it.each([
 		["B-07", "bag"],
+		["v-07", "vacuum_bag"],
 		["S-02", "suitcase"],
 		["CL-BEDROOM", "closet"],
 		["D-3", "drawer"],

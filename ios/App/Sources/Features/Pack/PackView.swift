@@ -52,7 +52,7 @@ struct PackView: View {
 				title: "Pack",
 				subtitle: "Which bag or suitcase are you packing?",
 				locations: model.locations,
-				preferKinds: [.bag, .suitcase],
+				preferKinds: LocationKind.packContainers,
 				onSelect: { loc in
 					model.chooseLocation(loc)
 				},

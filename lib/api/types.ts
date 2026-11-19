@@ -4,7 +4,13 @@
  * consumes them. Dates are ISO 8601 strings on the wire. Change here first.
  */
 
-export type LocationKind = "bag" | "suitcase" | "closet" | "drawer" | "other";
+export type LocationKind =
+	| "bag"
+	| "vacuum_bag"
+	| "suitcase"
+	| "closet"
+	| "drawer"
+	| "other";
 export type Season = "spring" | "summer" | "autumn" | "winter";
 export type ItemStatus = "active" | "stored" | "lent" | "donated" | "discarded";
 /** `outfit`: a photo of an outfit (PhotoDto.outfitId), not of one item. */

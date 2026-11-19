@@ -19,6 +19,7 @@ generator client {
 
 enum LocationKind {
   bag
+  vacuum_bag
   suitcase
   closet
   drawer

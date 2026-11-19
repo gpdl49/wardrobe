@@ -210,7 +210,7 @@ public actor FixtureWardrobeAPI: WardrobeAPI {
 		var n = 0
 		for i in items.indices where body.itemIds.contains(items[i].id) {
 			items[i].location = to?.ref
-			if let k = to?.kind { items[i].status = (k == .bag || k == .suitcase) ? .stored : (k == .closet || k == .drawer) ? .active : items[i].status }
+			if let k = to?.kind { items[i].status = LocationKind.packContainers.contains(k) ? .stored : (k == .closet || k == .drawer) ? .active : items[i].status }
 			n += 1
 		}
 		if let sid = body.sessionId {

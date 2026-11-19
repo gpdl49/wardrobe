@@ -47,7 +47,7 @@ struct UnpackView: View {
 				title: "Unpack",
 				subtitle: "Which bag or suitcase are you unpacking?",
 				locations: model.sourceLocations,
-				preferKinds: [.bag, .suitcase],
+				preferKinds: LocationKind.packContainers,
 				onSelect: { loc in
 					Task { await model.chooseSourceLocation(loc) }
 				},

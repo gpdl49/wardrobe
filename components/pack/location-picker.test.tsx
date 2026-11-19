@@ -138,6 +138,27 @@ describe("LocationPicker labels", () => {
 });
 
 describe("LocationPicker lists", () => {
+	it("creates the next numbered vacuum bag for packing", async () => {
+		const next = location({
+			kind: "vacuum_bag",
+			code: "V-03",
+			name: "Vacuum bag V-03",
+		});
+		const { fetch, onChoose, user } = setup({
+			"GET /api/locations": [location({ kind: "vacuum_bag", code: "V-02" })],
+			"POST /api/locations": next,
+		});
+		await user.click(
+			await screen.findByRole("button", { name: "New vacuum bag V-03" }),
+		);
+		await waitFor(() => expect(onChoose).toHaveBeenCalledWith(next));
+		expect(requests(fetch).find((r) => r.method === "POST")?.body).toEqual({
+			kind: "vacuum_bag",
+			code: "V-03",
+			name: "Vacuum bag V-03",
+		});
+	});
+
 	it("lists the pinned owner's locations, without new ones or a choice of wardrobe", async () => {
 		const { fetch } = setup(
 			{ "GET /api/locations": [location({ ownerId: ANNA, access: "edit" })] },

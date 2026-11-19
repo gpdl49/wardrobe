@@ -69,11 +69,12 @@ struct LocationFormView: View {
 							Label(k.label, systemImage: k.symbolName).tag(k)
 						}
 					}
-					.onChange(of: kind) { _, newKind in
+					.onChange(of: kind) { oldKind, newKind in
 						if !isEditing && (code.isEmpty || code.contains("-")) {
 							let codes = availableParents.map(\.code)
+							let usesDefaultName = name.isEmpty || name == defaultName(kind: oldKind, code: code)
 							code = nextFreeCode(from: codes, kind: newKind)
-							if name.isEmpty || name.hasPrefix("Vacuum bag ") || name.hasPrefix("Suitcase ") {
+							if usesDefaultName {
 								name = defaultName(kind: newKind, code: code)
 							}
 						}

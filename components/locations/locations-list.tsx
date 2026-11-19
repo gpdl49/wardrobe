@@ -32,6 +32,7 @@ import { LocationDialog } from "./location-dialog";
 
 export const KIND_ICONS: Record<LocationKind, LucideIcon> = {
 	bag: Package,
+	vacuum_bag: Package,
 	suitcase: Briefcase,
 	closet: DoorClosed,
 	drawer: Layers,
