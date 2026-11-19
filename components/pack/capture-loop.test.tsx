@@ -165,6 +165,23 @@ describe("CaptureLoop", () => {
 		expect(screen.getAllByLabelText("Has label photo")).toHaveLength(1);
 	});
 
+	it("adds a back photo to the selected item", async () => {
+		const { queue, user } = setup();
+		await user.upload(screen.getByTestId("shutter"), shot());
+		await queue.whenIdle();
+		await user.upload(screen.getByTestId("back-input"), shot("back.jpg"));
+		await queue.whenIdle();
+
+		const back = backend
+			.find("POST", "/api/photos")
+			.find((c) => (c.body as { kind: string }).kind === "back");
+		expect(back?.body).toMatchObject({ itemId: "item-1", kind: "back" });
+		expect(screen.getByText("Add another back photo")).toBeInTheDocument();
+		// A back photo is not a label.
+		expect(screen.getByText("Add label photo")).toBeInTheDocument();
+		expect(screen.queryByLabelText("Has label photo")).not.toBeInTheDocument();
+	});
+
 	it("shows a failed upload and retries it", async () => {
 		let reject = true;
 		backend.use((c) =>

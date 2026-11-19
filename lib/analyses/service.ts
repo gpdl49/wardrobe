@@ -96,7 +96,7 @@ export async function rerunAnalyses(
 		where: {
 			itemId: item.id,
 			status: "ready",
-			kind: { in: ["main", "label"] },
+			kind: { in: ["main", "back", "label"] },
 		},
 		orderBy: [{ createdAt: "asc" }, { id: "asc" }],
 	});
@@ -261,7 +261,7 @@ export async function bulkQueueAnalyses(
 				where: {
 					itemId: item.id,
 					status: "ready",
-					kind: { in: ["main", "label"] },
+					kind: { in: ["main", "back", "label"] },
 				},
 			}),
 			// In flight, or done with the current prompt: nothing to do. Done

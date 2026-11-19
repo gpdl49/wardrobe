@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
 import type { PhotoDto } from "@/lib/api/types";
 
-const KIND_LABELS: Record<PhotoDto["kind"], string> = {
-	main: "Photo",
+export const KIND_LABELS: Record<PhotoDto["kind"], string> = {
+	main: "Front",
+	back: "Back",
 	label: "Label",
 	detail: "Detail",
 	outfit: "Outfit",
@@ -25,6 +26,7 @@ export function PhotoGallery({
 	onSetCover,
 	onRemoveBackground,
 	requestingBackgroundFor,
+	show,
 }: {
 	photos: PhotoDto[];
 	coverPhotoId?: string | null;
@@ -32,6 +34,8 @@ export function PhotoGallery({
 	onSetCover?: (photoId: string) => void;
 	onRemoveBackground?: (photoId: string) => void;
 	requestingBackgroundFor?: string;
+	/** Scrolls to this photo; pass a new object to show the same photo again. */
+	show?: { photoId: string } | null;
 }) {
 	const scroller = useRef<HTMLDivElement>(null);
 	const [index, setIndex] = useState(0);
@@ -55,6 +59,13 @@ export function PhotoGallery({
 		setIndex(i);
 	}, []);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: only when asked; `photos` changes on every poll.
+	useEffect(() => {
+		if (!show) return;
+		const i = photos.findIndex((p) => p.id === show.photoId);
+		if (i >= 0) go(i);
+	}, [show]);
+
 	if (photos.length === 0) {
 		return (
 			<div className="flex aspect-[4/5] flex-col items-center justify-center gap-2 rounded-card border border-dashed border-line-strong text-sm text-muted">
@@ -68,7 +79,7 @@ export function PhotoGallery({
 	const canRemove =
 		onRemoveBackground &&
 		current?.access !== "view" &&
-		current?.kind === "main" &&
+		(current?.kind === "main" || current?.kind === "back") &&
 		current.status === "ready";
 	return (
 		<div className="flex flex-col gap-2">
@@ -95,6 +106,9 @@ export function PhotoGallery({
 								priority={i === 0}
 								className="size-full"
 							/>
+							<span className="absolute top-2 left-2 rounded-full bg-black/60 px-2.5 py-1 text-xs text-white">
+								{KIND_LABELS[photo.kind]}
+							</span>
 							{photo.status !== "ready" ? (
 								<span className="absolute bottom-3 left-3 rounded-full bg-black/60 px-2.5 py-1 text-xs text-white">
 									{photo.status === "failed"

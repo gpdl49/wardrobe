@@ -48,7 +48,10 @@ enum ItemStatus {
 }
 
 enum PhotoKind {
+  /// The front of the garment.
   main
+  /// The back of the garment.
+  back
   label
   detail
   /// A photo of an outfit being worn (Photo.outfitId), not of one item.

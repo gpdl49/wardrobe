@@ -13,8 +13,11 @@ export type LocationKind =
 	| "other";
 export type Season = "spring" | "summer" | "autumn" | "winter";
 export type ItemStatus = "active" | "stored" | "lent" | "donated" | "discarded";
-/** `outfit`: a photo of an outfit (PhotoDto.outfitId), not of one item. */
-export type PhotoKind = "main" | "label" | "detail" | "outfit";
+/**
+ * `main` is the garment's front and `back` its back. `outfit`: a photo of an
+ * outfit (PhotoDto.outfitId), not of one item.
+ */
+export type PhotoKind = "main" | "back" | "label" | "detail" | "outfit";
 export type PhotoStatus = "pending" | "processing" | "ready" | "failed";
 export type PhotoVariant = "original" | "display" | "thumb";
 export type PhotoBackgroundStatus = "queued" | "ready" | "skipped" | "failed";

@@ -1,11 +1,11 @@
 import { db } from "@/lib/db";
 
 // `outfit` photos never belong to an item; ranked last for completeness.
-const kindRank = { main: 0, detail: 1, label: 2, outfit: 3 } as const;
+const kindRank = { main: 0, back: 1, detail: 2, label: 3, outfit: 4 } as const;
 
 /**
  * Gives an item without a cover photo one: its best ready photo (kind `main`
- * first, then `detail`, then `label`; oldest first within a kind). No-op when
+ * first, then `back`, `detail`, `label`; oldest first within a kind). No-op when
  * the item already has a cover, is gone, or has no ready photo. Only fills an
  * empty cover, so it is safe to call concurrently.
  */

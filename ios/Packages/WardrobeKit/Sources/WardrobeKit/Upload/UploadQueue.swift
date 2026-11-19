@@ -10,6 +10,9 @@ public enum UploadTarget: Codable, Hashable, Sendable {
 	case outfit(ID)
 	/// Create the item first (POST /items with the job's key), then attach.
 	case newItem(CreateItemRequest)
+	/// Attach to the item another job (a `.newItem` one) creates; waits until
+	/// that job has its item id.
+	case afterJob(UUID)
 }
 
 /// One capture on its way to the server. Snapshot type for the UI.
@@ -290,10 +293,10 @@ public final class UploadQueue {
 
 		let jobId = UUID()
 		let initialItemId: ID?
-		if case .item(let id) = target {
-			initialItemId = id
-		} else {
-			initialItemId = nil
+		switch target {
+		case .item(let id): initialItemId = id
+		case .afterJob(let parentId): initialItemId = job(id: parentId)?.itemId
+		default: initialItemId = nil
 		}
 
 		let job = UploadJob(
@@ -378,9 +381,16 @@ public final class UploadQueue {
 		pump()
 	}
 
+	/// Removes a job and its files, and any captures still waiting for the
+	/// item it would have created.
 	public func discard(jobId: UUID) {
+		guard let job = jobs.first(where: { $0.id == jobId }) else { return }
+		if job.itemId == nil {
+			for child in jobs where child.target == .afterJob(jobId) && child.itemId == nil {
+				discard(jobId: child.id)
+			}
+		}
 		guard let idx = jobs.firstIndex(where: { $0.id == jobId }) else { return }
-		let job = jobs[idx]
 		jobs.remove(at: idx)
 		store.deleteJobFiles(id: jobId, userSub: job.userSub)
 		activeJobIds.remove(jobId)
@@ -401,7 +411,7 @@ public final class UploadQueue {
 		if !activeJobIds.isEmpty { return false }
 		if authRequired || isPaused { return true }
 		let now = clock()
-		for job in jobs {
+		for job in jobs where !isWaitingForParent(job) {
 			if job.phase == .waiting && (job.nextAttemptAt == nil || job.nextAttemptAt! <= now) {
 				return false
 			}
@@ -455,7 +465,34 @@ public final class UploadQueue {
 		return nil
 	}
 
+	/// An `.afterJob` capture whose parent has no item yet.
+	private func isWaitingForParent(_ job: UploadJob) -> Bool {
+		if case .afterJob = job.target, job.itemId == nil { return true }
+		return false
+	}
+
+	/// Gives `.afterJob` captures their parent's item id once it exists; fails
+	/// them if the parent is gone without one (discarded).
+	private func resolveParents() {
+		for child in jobs where isWaitingForParent(child) && child.phase == .waiting {
+			guard case .afterJob(let parentId) = child.target else { continue }
+			if let parent = job(id: parentId) {
+				if let itemId = parent.itemId {
+					updateJob(id: child.id) { j in j.itemId = itemId }
+				}
+			} else {
+				updateJob(id: child.id) { j in
+					j.phase = .failed
+					j.lastError = "The item for this photo was not created"
+				}
+			}
+		}
+	}
+
 	private func isBlocked(job: UploadJob) -> Bool {
+		if isWaitingForParent(job) {
+			return true
+		}
 		if let itemId = job.itemId, activeItemIds.contains(itemId) {
 			return true
 		}
@@ -470,6 +507,7 @@ public final class UploadQueue {
 
 	private func pump() {
 		guard !isPaused, !authRequired, currentUserSub != nil else { return }
+		resolveParents()
 		let now = clock()
 
 		for job in jobs {
@@ -609,6 +647,9 @@ public final class UploadQueue {
 				j.lastError = nil
 				j.attempts = 0
 			}
+			// Persist the item id on waiting captures before anything else can
+			// drop this job (done jobs leave the queue across restarts).
+			resolveParents()
 
 		case .createPhoto:
 			guard let jpegData = try store.loadJPEGData(for: jobId, userSub: job.userSub) else {

@@ -66,11 +66,32 @@ public struct ItemStatus: OpenEnum {
 public struct PhotoKind: OpenEnum {
 	public let rawValue: String
 	public init(rawValue: String) { self.rawValue = rawValue }
+	/// The front of the garment.
 	public static let main: Self = "main"
+	/// The back of the garment.
+	public static let back: Self = "back"
 	public static let label: Self = "label"
 	public static let detail: Self = "detail"
 	public static let outfit: Self = "outfit"
-	public static let known: [Self] = [.main, .label, .detail, .outfit]
+	public static let known: [Self] = [.main, .back, .label, .detail, .outfit]
+
+	/// Kinds a user can pick for an item photo, in display order.
+	public static let itemKinds: [Self] = [.main, .back, .label, .detail]
+
+	/// Whole-garment shots: the ones background removal works on.
+	public var isGarment: Bool { self == .main || self == .back }
+
+	/// User-facing name; `main` is shown as "Front".
+	public var displayName: String {
+		switch self {
+		case .main: "Front"
+		case .back: "Back"
+		case .label: "Label"
+		case .detail: "Detail"
+		case .outfit: "Outfit"
+		default: rawValue.capitalized
+		}
+	}
 }
 
 public struct PhotoStatus: OpenEnum {

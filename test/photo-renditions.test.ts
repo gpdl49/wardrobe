@@ -174,6 +174,20 @@ describeWithDb("photo.renditions job", () => {
 		});
 	});
 
+	it("prefers a back photo over detail and label photos for the cover", async () => {
+		const item = await makeItem();
+		for (const kind of ["label", "detail"] as const) {
+			await makePhoto({ itemId: item.id, kind, status: "ready" });
+		}
+		const back = await makePhoto({ itemId: item.id, kind: "back" });
+		s3.upload(photoKey(back.id, "original"), await pngImage());
+		await run(back.id);
+		expect(
+			(await db().item.findUniqueOrThrow({ where: { id: item.id } }))
+				.coverPhotoId,
+		).toBe(back.id);
+	});
+
 	it("keeps an existing cover", async () => {
 		const item = await makeItem();
 		const existing = await makePhoto({ itemId: item.id, status: "ready" });

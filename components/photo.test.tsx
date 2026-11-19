@@ -41,4 +41,15 @@ describe("Photo", () => {
 		);
 		expect(screen.getByAltText("shirt")).toHaveClass("object-contain");
 	});
+
+	it("treats a back photo's cutout the same way", () => {
+		render(
+			<Photo
+				photo={{ ...photo, kind: "back", backgroundStatus: "ready" }}
+				variant="thumb"
+				alt="shirt"
+			/>,
+		);
+		expect(screen.getByAltText("shirt")).toHaveClass("object-contain");
+	});
 });
