@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const LOCATION_KINDS = [
 	"bag",
+	"vacuum_bag",
 	"suitcase",
 	"closet",
 	"drawer",

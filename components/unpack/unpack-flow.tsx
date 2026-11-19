@@ -17,7 +17,7 @@ import {
 	api as client,
 	isApiError,
 } from "@/lib/client/api";
-import { kindLabel } from "@/lib/client/location-codes";
+import { kindLabel, PACK_LOCATION_KINDS } from "@/lib/client/location-codes";
 
 type LastMove = { items: ItemSummaryDto[]; to: LocationRef };
 
@@ -181,7 +181,7 @@ export function UnpackFlow({ initialLocationId, api = defaultApi }: Props) {
 					</p>
 				)}
 				<LocationPicker
-					preferKinds={["bag", "suitcase"]}
+					preferKinds={PACK_LOCATION_KINDS}
 					onChoose={(location) => void open(location.id)}
 				/>
 			</div>

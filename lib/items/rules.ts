@@ -4,7 +4,7 @@ import { badRequest } from "@/lib/http/errors";
 /**
  * Status follows the kind of place an item is moved into:
  *
- * - into a bag or suitcase -> `stored` (packed away);
+ * - into a bag, vacuum bag or suitcase -> `stored` (packed away);
  * - into a closet or drawer -> `active` (back in use, also for an item that
  *   was lent, donated or discarded and has come back);
  * - into an `other` location or out of any location -> unchanged.
@@ -17,6 +17,7 @@ export function statusForLocationKind(
 ): ItemStatus | null {
 	switch (kind) {
 		case "bag":
+		case "vacuum_bag":
 		case "suitcase":
 			return "stored";
 		case "closet":

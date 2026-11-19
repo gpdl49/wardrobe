@@ -7,6 +7,7 @@ import WardrobeKit
 public func codePrefix(for kind: LocationKind) -> String {
 	switch kind {
 	case .bag: "B"
+	case .vacuumBag: "V"
 	case .suitcase: "S"
 	case .closet: "CL"
 	case .drawer: "DR"
@@ -23,6 +24,7 @@ public func kindForCode(_ code: String) -> LocationKind {
 	let prefix = String(trimmed[..<dashIndex])
 	switch prefix {
 	case "B": return .bag
+	case "V": return .vacuumBag
 	case "S": return .suitcase
 	case "CL": return .closet
 	case "D", "DR": return .drawer
@@ -58,7 +60,7 @@ public func nextFreeCode(from codes: [String], kind: LocationKind) -> String {
 	return candidate
 }
 
-/// Default display name for a new numbered container (e.g. "Vacuum bag B-08").
+/// Default display name for a new numbered container (e.g. "Vacuum bag V-08").
 public func defaultName(kind: LocationKind, code: String) -> String {
 	"\(kind.label) \(code)"
 }

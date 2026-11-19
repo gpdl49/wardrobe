@@ -17,6 +17,7 @@ import {
 	kindForCode,
 	kindLabel,
 	nextFreeCode,
+	PACK_LOCATION_KINDS,
 } from "@/lib/client/location-codes";
 import type { ParsedLabel } from "@/lib/client/qr";
 
@@ -24,7 +25,7 @@ type Props = {
 	/** Offer new bags/suitcases with the next free code, and unknown scanned labels. */
 	allowCreate?: boolean;
 	/** Kinds listed first (closets and drawers when unpacking into them). */
-	preferKinds?: LocationKind[];
+	preferKinds?: readonly LocationKind[];
 	excludeId?: string;
 	/** A code of the caller's own to resolve straight away (/pack?code=…). */
 	initialCode?: string;
@@ -254,8 +255,8 @@ export function LocationPicker({
 			)}
 
 			{allowCreate && isOwn && all && (
-				<div className="grid grid-cols-2 gap-3">
-					{(["bag", "suitcase"] as const).map((kind) => {
+				<div className="grid gap-3 sm:grid-cols-3">
+					{PACK_LOCATION_KINDS.map((kind) => {
 						const code = nextFreeCode(codes, kind);
 						return (
 							<button
@@ -266,7 +267,7 @@ export function LocationPicker({
 								className="flex items-center justify-center gap-2 rounded-xl border border-neutral-300 bg-white px-3 py-3 font-medium disabled:opacity-50 dark:border-neutral-700 dark:bg-neutral-900"
 							>
 								<Plus className="size-5" aria-hidden />
-								New {kind} {code}
+								New {kindLabel(kind).toLowerCase()} {code}
 							</button>
 						);
 					})}

@@ -9,6 +9,7 @@ import {
 describe("statusForLocationKind", () => {
 	it.each([
 		["bag", "stored"],
+		["vacuum_bag", "stored"],
 		["suitcase", "stored"],
 		["closet", "active"],
 		["drawer", "active"],

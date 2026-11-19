@@ -10,6 +10,7 @@ export const ITEM_STATUSES: ItemStatus[] = [
 ];
 export const LOCATION_KINDS: LocationKind[] = [
 	"bag",
+	"vacuum_bag",
 	"suitcase",
 	"closet",
 	"drawer",
@@ -34,6 +35,7 @@ export const STATUS_LABELS: Record<ItemStatus, string> = {
 export const KIND_LABELS: Record<LocationKind, { one: string; many: string }> =
 	{
 		bag: { one: "Bag", many: "Bags" },
+		vacuum_bag: { one: "Vacuum bag", many: "Vacuum bags" },
 		suitcase: { one: "Suitcase", many: "Suitcases" },
 		closet: { one: "Closet", many: "Closets" },
 		drawer: { one: "Drawer", many: "Drawers" },

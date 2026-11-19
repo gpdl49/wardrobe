@@ -53,6 +53,26 @@ describeWithDb("locations API", () => {
 	});
 
 	describe("POST /api/locations", () => {
+		it("creates and filters vacuum bags separately from bags", async () => {
+			await makeLocation({ kind: "bag", code: "B-01" });
+			const response = await postLocation(
+				apiRequest("/api/locations", {
+					method: "POST",
+					body: { kind: "vacuum_bag", code: "v-01", name: "Vacuum bag V-01" },
+				}),
+				{},
+			);
+			expect(response.status).toBe(201);
+			const created = await json<LocationJson>(response);
+			expect(created).toMatchObject({ kind: "vacuum_bag", code: "V-01" });
+			const filtered = await listLocations(
+				apiRequest("/api/locations?kind=vacuum_bag"),
+				{},
+			);
+			expect(filtered.status).toBe(200);
+			expect(await json<LocationJson[]>(filtered)).toEqual([created]);
+		});
+
 		it("creates a location and normalises the code", async () => {
 			const response = await postLocation(
 				apiRequest("/api/locations", {

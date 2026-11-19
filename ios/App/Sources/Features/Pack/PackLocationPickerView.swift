@@ -17,7 +17,7 @@ struct PackLocationPickerView: View {
 		title: String,
 		subtitle: String? = nil,
 		locations: [LocationDTO],
-		preferKinds: [LocationKind] = [.bag, .suitcase],
+		preferKinds: [LocationKind] = LocationKind.packContainers,
 		excludeId: ID? = nil,
 		onSelect: @escaping (LocationDTO) -> Void,
 		onScanTap: @escaping () -> Void

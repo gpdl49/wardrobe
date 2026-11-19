@@ -15,6 +15,7 @@ import {
 } from "@/lib/client/active-session";
 import { api } from "@/lib/client/api";
 import { useCurrentUser } from "@/lib/client/current-user";
+import { PACK_LOCATION_KINDS } from "@/lib/client/location-codes";
 import { useQueueSnapshot, useUploadQueue } from "@/lib/client/upload";
 
 type Phase =
@@ -141,7 +142,7 @@ function PackFlowFor({
 					)}
 					<LocationPicker
 						allowCreate
-						preferKinds={["bag", "suitcase"]}
+						preferKinds={PACK_LOCATION_KINDS}
 						initialCode={initialCode}
 						onChoose={(location: LocationDto) => {
 							if (initialLocationId || initialCode) router.replace("/pack");

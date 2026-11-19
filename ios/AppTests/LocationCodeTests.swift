@@ -28,6 +28,7 @@ import WardrobeKit
 	@Test func kindForCodeInfersCorrectKind() {
 		#expect(kindForCode("B-01") == .bag)
 		#expect(kindForCode("b-12") == .bag)
+		#expect(kindForCode("v-03") == .vacuumBag)
 		#expect(kindForCode("S-04") == .suitcase)
 		#expect(kindForCode("CL-BEDROOM") == .closet)
 		#expect(kindForCode("D-01") == .drawer)
@@ -53,7 +54,8 @@ import WardrobeKit
 	}
 
 	@Test func defaultNameGeneratesCorrectDisplay() {
-		#expect(defaultName(kind: .bag, code: "B-07") == "Vacuum bag B-07")
+		#expect(defaultName(kind: .bag, code: "B-07") == "Bag B-07")
+		#expect(defaultName(kind: .vacuumBag, code: "V-07") == "Vacuum bag V-07")
 		#expect(defaultName(kind: .suitcase, code: "S-01") == "Suitcase S-01")
 	}
 

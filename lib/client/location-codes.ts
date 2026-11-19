@@ -1,13 +1,17 @@
 import type { LocationKind } from "@/lib/api/types";
 
-/** Code prefixes for numbered containers (docs/wardrobe.md: B-07, S-02). */
-export const CODE_PREFIX: Partial<Record<LocationKind, string>> = {
+export const PACK_LOCATION_KINDS = ["bag", "vacuum_bag", "suitcase"] as const;
+type PackLocationKind = (typeof PACK_LOCATION_KINDS)[number];
+
+const CODE_PREFIX: Record<PackLocationKind, string> = {
 	bag: "B",
+	vacuum_bag: "V",
 	suitcase: "S",
 };
 
 const KIND_BY_PREFIX: Record<string, LocationKind> = {
 	B: "bag",
+	V: "vacuum_bag",
 	S: "suitcase",
 	CL: "closet",
 	D: "drawer",
@@ -22,9 +26,9 @@ const KIND_BY_PREFIX: Record<string, LocationKind> = {
  */
 export function nextFreeCode(
 	codes: Iterable<string>,
-	kind: "bag" | "suitcase",
+	kind: PackLocationKind,
 ): string {
-	const prefix = CODE_PREFIX[kind] ?? "B";
+	const prefix = CODE_PREFIX[kind];
 	const pattern = new RegExp(`^${prefix}-(\\d+)$`, "i");
 	const taken = new Set<string>();
 	let max = 0;
@@ -57,6 +61,7 @@ export function kindForCode(code: string): LocationKind {
 
 const KIND_LABEL: Record<LocationKind, string> = {
 	bag: "Bag",
+	vacuum_bag: "Vacuum bag",
 	suitcase: "Suitcase",
 	closet: "Closet",
 	drawer: "Drawer",

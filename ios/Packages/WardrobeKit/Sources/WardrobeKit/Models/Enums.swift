@@ -33,11 +33,13 @@ public struct LocationKind: OpenEnum {
 	public let rawValue: String
 	public init(rawValue: String) { self.rawValue = rawValue }
 	public static let bag: Self = "bag"
+	public static let vacuumBag: Self = "vacuum_bag"
 	public static let suitcase: Self = "suitcase"
 	public static let closet: Self = "closet"
 	public static let drawer: Self = "drawer"
 	public static let other: Self = "other"
-	public static let known: [Self] = [.bag, .suitcase, .closet, .drawer, .other]
+	public static let packContainers: [Self] = [.bag, .vacuumBag, .suitcase]
+	public static let known: [Self] = [.bag, .vacuumBag, .suitcase, .closet, .drawer, .other]
 }
 
 public struct Season: OpenEnum {
