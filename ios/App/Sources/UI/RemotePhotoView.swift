@@ -29,17 +29,29 @@ struct RemotePhotoView: View {
 	var variant: PhotoVariant = .thumb
 	var contentMode: ContentMode = .fill
 
-	@State private var loadedData: Data?
+	private struct PhotoRequest: Hashable {
+		let id: ID
+		let status: PhotoStatus
+		let variant: PhotoVariant
+	}
+
+	@State private var loadedPhoto: (request: PhotoRequest, data: Data)?
 	@State private var isFailed = false
 
+	private var request: PhotoRequest? {
+		photo.map { PhotoRequest(id: $0.id, status: $0.status, variant: $0.rendition(variant)) }
+	}
+
 	var body: some View {
+		let loadedData = loadedPhoto?.request == request ? loadedPhoto?.data : nil
+		let showingCutout = request?.variant == .cutoutDisplay || request?.variant == .cutoutThumb
 		GeometryReader { geometry in
 			ZStack {
 				// Base background / placeholder
 				Rectangle().fill(.quaternary)
 
 				// Blurhash background if available
-				if let hash = photo?.blurhash, let cgImage = BlurhashCache.image(for: hash) {
+				if !(showingCutout && loadedData != nil), let hash = photo?.blurhash, let cgImage = BlurhashCache.image(for: hash) {
 					Image(decorative: cgImage, scale: 1.0)
 						.resizable()
 						.aspectRatio(contentMode: contentMode)
@@ -94,27 +106,31 @@ struct RemotePhotoView: View {
 			.frame(width: geometry.size.width, height: geometry.size.height)
 			.clipped()
 		}
-		.task(id: photo?.id) {
-			await loadPhoto()
+		.task(id: request) {
+			await loadPhoto(request)
 		}
 	}
 
-	private func loadPhoto() async {
-		guard let photo, photo.status == .ready else {
-			loadedData = nil
+	private func loadPhoto(_ request: PhotoRequest?) async {
+		guard let request, request.status == .ready else {
+			loadedPhoto = nil
 			return
 		}
 
+		isFailed = false
 		do {
-			if let data = try await model.images.data(photoId: photo.id, variant: variant) {
+			let data = try await model.images.data(photoId: request.id, variant: request.variant)
+			guard !Task.isCancelled else { return }
+			if let data {
 				withAnimation(.easeInOut(duration: 0.25)) {
-					loadedData = data
+					loadedPhoto = (request, data)
 					isFailed = false
 				}
 			} else {
 				isFailed = true
 			}
 		} catch {
+			guard !Task.isCancelled else { return }
 			_ = model.message(for: error)
 			isFailed = true
 		}

@@ -1,6 +1,12 @@
+import { realpathSync } from "node:fs";
+import { join, relative } from "node:path";
 import type { NextConfig } from "next";
 
 const isDev = process.env.NODE_ENV === "development";
+const onnxRuntimeDirectory = relative(
+	import.meta.dirname,
+	realpathSync(join(import.meta.dirname, "node_modules/onnxruntime-web/dist")),
+).replaceAll("\\", "/");
 
 /**
  * Photos are uploaded straight to S3 with presigned PUTs and shown through
@@ -26,6 +32,13 @@ const CSP = [
 const nextConfig: NextConfig = {
 	output: "standalone",
 	serverExternalPackages: ["onnxruntime-web"],
+	// ONNX imports these files dynamically. Use the package's real location
+	// so the standalone build includes them in aube's linked package layout.
+	outputFileTracingIncludes: {
+		"/api/photos/**": [
+			`${onnxRuntimeDirectory}/ort-wasm-simd-threaded.{mjs,wasm}`,
+		],
+	},
 	// This project is a submodule of gpdl49/homestacks, which has its own
 	// lockfile; pin the tracing root here so standalone output is flat.
 	outputFileTracingRoot: import.meta.dirname,

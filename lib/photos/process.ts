@@ -32,9 +32,7 @@ export async function processPhotoRenditions(
 	}
 	try {
 		const original = await getObjectBytes(photoKey(photoId, "original"));
-		const renditions = await renderRenditions(original, {
-			removeBackground: photo.kind === "main",
-		});
+		const renditions = await renderRenditions(original);
 		await Promise.all([
 			putObject(photoKey(photoId, "display"), renditions.display, "image/webp"),
 			putObject(photoKey(photoId, "thumb"), renditions.thumb, "image/webp"),

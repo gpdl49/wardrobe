@@ -1,3 +1,4 @@
+import { fromPrisma } from "pg-boss";
 import {
 	type AccessContext,
 	accessToItem,
@@ -13,10 +14,12 @@ import type { Viewer } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
 	ApiError,
+	conflict,
 	forbidden,
 	notFound,
 	unprocessable,
 } from "@/lib/http/errors";
+import { photoBackground } from "@/lib/jobs/definitions/photo-background";
 import { photoRenditions } from "@/lib/jobs/definitions/photo-renditions";
 import { enqueue } from "@/lib/jobs/queue";
 import { readableCoverThroughOutfit } from "@/lib/outfits/service";
@@ -234,16 +237,56 @@ export async function variantUrl(
 			!(await readableCoverThroughOutfit(ctx, photo.id)))
 	)
 		throw notFound("Photo not found");
+	const variantName = parsedVariant.data;
+	const isCutout =
+		variantName === "cutout-display" || variantName === "cutout-thumb";
 	const available =
-		parsedVariant.data === "original"
+		variantName === "original"
 			? photo.status !== "pending"
-			: photo.status === "ready";
+			: photo.status === "ready" &&
+				(!isCutout ||
+					(photo.kind === "main" && photo.backgroundStatus === "ready"));
 	if (!available) {
 		throw notFound(`The ${parsedVariant.data} rendition is not ready`);
 	}
 	return presignGet(photoKey(photo.id, parsedVariant.data), {
 		expiresIn: VARIANT_URL_TTL_SECONDS,
 	});
+}
+
+export async function queuePhotoBackground(
+	viewer: Viewer,
+	id: string,
+): Promise<PhotoDto> {
+	const { photo, access } = await findPhoto(await loadAccess(viewer), id);
+	requireEdit(access, "Photo");
+	if (photo.kind !== "main")
+		throw unprocessable("Only main garment photos support background removal");
+	if (photo.status !== "ready") throw conflict("Wait until the photo is ready");
+
+	const updated = await db().$transaction(async (tx) => {
+		const [claimed] = await tx.photo.updateManyAndReturn({
+			where: {
+				id: photo.id,
+				kind: "main",
+				status: "ready",
+				OR: [{ backgroundStatus: null }, { backgroundStatus: "failed" }],
+			},
+			data: { backgroundStatus: "queued" },
+		});
+		if (claimed) {
+			const jobId = await enqueue(
+				photoBackground,
+				{ photoId: photo.id },
+				{ db: fromPrisma(tx) },
+			);
+			if (!jobId) throw new Error("Background removal job was not queued");
+			return claimed;
+		}
+		return tx.photo.findUnique({ where: { id: photo.id } });
+	});
+	if (!updated) throw notFound("Photo not found");
+	return toPhotoDto(updated, access);
 }
 
 /**

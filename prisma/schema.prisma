@@ -66,6 +66,15 @@ enum PhotoStatus {
   @@map("photo_status")
 }
 
+enum PhotoBackgroundStatus {
+  queued
+  ready
+  skipped
+  failed
+
+  @@map("photo_background_status")
+}
+
 enum SessionMode {
   pack
   unpack
@@ -279,7 +288,7 @@ model ItemTag {
 }
 
 /// Object keys: photos/<id>/original, photos/<id>/display.webp,
-/// photos/<id>/thumb.webp (lib/s3). Deleting rows does not delete objects;
+/// photos/<id>/thumb.webp and optional cutout variants (lib/s3). Deleting rows does not delete objects;
 /// the API deletes the objects.
 ///
 /// An unassigned photo belongs to its uploader; assigning it to an item passes
@@ -287,24 +296,25 @@ model ItemTag {
 /// belongs to the outfit's owner; a check constraint in the migration keeps a
 /// photo from having both an item and an outfit.
 model Photo {
-  id          String      @id @default(uuid(7)) @db.Uuid
-  ownerId     String      @map("owner_id") @db.Uuid
-  owner       User        @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  id               String                 @id @default(uuid(7)) @db.Uuid
+  ownerId          String                 @map("owner_id") @db.Uuid
+  owner            User                   @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   /// Null while a packing capture is unassigned.
-  itemId      String?     @map("item_id") @db.Uuid
-  item        Item?       @relation("ItemPhotos", fields: [itemId], references: [id], onDelete: Cascade)
-  outfitId    String?     @map("outfit_id") @db.Uuid
-  outfit      Outfit?     @relation(fields: [outfitId], references: [id], onDelete: Cascade)
-  kind        PhotoKind
-  status      PhotoStatus @default(pending)
-  contentType String      @map("content_type") @db.VarChar(100)
+  itemId           String?                @map("item_id") @db.Uuid
+  item             Item?                  @relation("ItemPhotos", fields: [itemId], references: [id], onDelete: Cascade)
+  outfitId         String?                @map("outfit_id") @db.Uuid
+  outfit           Outfit?                @relation(fields: [outfitId], references: [id], onDelete: Cascade)
+  kind             PhotoKind
+  status           PhotoStatus            @default(pending)
+  backgroundStatus PhotoBackgroundStatus? @map("background_status")
+  contentType      String                 @map("content_type") @db.VarChar(100)
   /// Bytes of the original.
-  size        Int
-  width       Int?
-  height      Int?
-  blurhash    String?     @db.VarChar(100)
-  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt   DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  size             Int
+  width            Int?
+  height           Int?
+  blurhash         String?                @db.VarChar(100)
+  createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   coverOf  Item?      @relation("ItemCoverPhoto")
   analyses Analysis[]

@@ -332,6 +332,15 @@ public actor FixtureWardrobeAPI: WardrobeAPI {
         }
         return photo
 	}
+	public func removePhotoBackground(id: ID) async throws -> PhotoDTO {
+		try record("POST /photos/\(id)/background")
+		guard let index = photos.firstIndex(where: { $0.id == id }) else {
+			throw APIError(status: 404, error: "not_found", message: "Photo not found")
+		}
+		photos[index].backgroundStatus = .ready
+		return photos[index]
+	}
+
 	public func updatePhoto(id: ID, _ body: UpdatePhotoRequest) async throws -> PhotoDTO {
 		try record("PATCH /photos/\(id)")
 		guard let i = photos.firstIndex(where: { $0.id == id }) else {

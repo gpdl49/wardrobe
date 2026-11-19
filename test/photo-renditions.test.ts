@@ -4,6 +4,7 @@ import sharp from "sharp";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { db } from "@/lib/db";
 import type { Prisma } from "@/lib/generated/prisma/client";
+import { photoBackground } from "@/lib/jobs/definitions/photo-background";
 import { photoRenditions } from "@/lib/jobs/definitions/photo-renditions";
 import { jobDefinitions } from "@/lib/jobs/registry";
 import * as hooks from "@/lib/photos/hooks";
@@ -37,6 +38,7 @@ const reload = (id: string) => db().photo.findUniqueOrThrow({ where: { id } });
 
 it("photo.renditions is registered", () => {
 	expect(jobDefinitions).toContain(photoRenditions);
+	expect(jobDefinitions).toContain(photoBackground);
 });
 
 describeWithDb("photo.renditions job", () => {
@@ -98,27 +100,79 @@ describeWithDb("photo.renditions job", () => {
 		).toBe(main.id);
 	});
 
-	it("only cuts out main photos and keeps the original upload", async () => {
+	it("processes a photo normally and makes a cutout only when requested", async () => {
 		const original = await readFile(
 			new URL("./fixtures/white-shirt.jpg", import.meta.url),
 		);
-		for (const kind of ["main", "detail", "label", "outfit"] as const) {
-			const photo = await makePhoto({ kind });
-			const originalKey = photoKey(photo.id, "original");
-			s3.upload(originalKey, original);
+		const photo = await makePhoto();
+		const originalKey = photoKey(photo.id, "original");
+		s3.upload(originalKey, original);
 
-			await run(photo.id);
+		await run(photo.id);
+		expect(await reload(photo.id)).toMatchObject({
+			status: "ready",
+			backgroundStatus: null,
+		});
+		expect(
+			(
+				await sharp(
+					s3.objects.get(photoKey(photo.id, "display"))?.body,
+				).metadata()
+			).hasAlpha,
+		).toBe(false);
+		expect(s3.objects.has(photoKey(photo.id, "cutout-display"))).toBe(false);
 
-			expect((await reload(photo.id)).status).toBe("ready");
-			expect(s3.objects.get(originalKey)?.body).toEqual(original);
-			for (const variant of ["display", "thumb"] as const) {
-				const rendition = s3.objects.get(photoKey(photo.id, variant));
-				expect((await sharp(rendition?.body).metadata()).hasAlpha).toBe(
-					kind === "main",
-				);
-			}
+		await db().photo.update({
+			where: { id: photo.id },
+			data: { backgroundStatus: "queued" },
+		});
+		await photoBackground.handler({ photoId: photo.id }, {
+			retryCount: 0,
+		} as Job<unknown>);
+
+		expect(await reload(photo.id)).toMatchObject({
+			status: "ready",
+			backgroundStatus: "ready",
+		});
+		expect(s3.objects.get(originalKey)?.body).toEqual(original);
+		for (const variant of ["cutout-display", "cutout-thumb"] as const) {
+			const rendition = s3.objects.get(photoKey(photo.id, variant));
+			expect((await sharp(rendition?.body).metadata()).hasAlpha).toBe(true);
 		}
+		expect(
+			(
+				await sharp(
+					s3.objects.get(photoKey(photo.id, "display"))?.body,
+				).metadata()
+			).hasAlpha,
+		).toBe(false);
 	}, 15_000);
+
+	it("records an uncertain cutout and a terminal storage failure separately", async () => {
+		const job = { retryCount: 2 } as Job<unknown>;
+		const skipped = await makePhoto({
+			status: "ready",
+			backgroundStatus: "queued",
+		});
+		s3.upload(photoKey(skipped.id, "original"), await pngImage());
+		await photoBackground.handler({ photoId: skipped.id }, job);
+		expect(await reload(skipped.id)).toMatchObject({
+			status: "ready",
+			backgroundStatus: "skipped",
+		});
+
+		const missing = await makePhoto({
+			status: "ready",
+			backgroundStatus: "queued",
+		});
+		await expect(
+			photoBackground.handler({ photoId: missing.id }, job),
+		).rejects.toThrow();
+		expect(await reload(missing.id)).toMatchObject({
+			status: "ready",
+			backgroundStatus: "failed",
+		});
+	});
 
 	it("keeps an existing cover", async () => {
 		const item = await makeItem();

@@ -83,13 +83,25 @@ public struct PhotoStatus: OpenEnum {
 	public static let known: [Self] = [.pending, .processing, .ready, .failed]
 }
 
+public struct PhotoBackgroundStatus: OpenEnum {
+	public let rawValue: String
+	public init(rawValue: String) { self.rawValue = rawValue }
+	public static let queued: Self = "queued"
+	public static let ready: Self = "ready"
+	public static let skipped: Self = "skipped"
+	public static let failed: Self = "failed"
+	public static let known: [Self] = [.queued, .ready, .skipped, .failed]
+}
+
 public struct PhotoVariant: OpenEnum {
 	public let rawValue: String
 	public init(rawValue: String) { self.rawValue = rawValue }
 	public static let original: Self = "original"
 	public static let display: Self = "display"
 	public static let thumb: Self = "thumb"
-	public static let known: [Self] = [.original, .display, .thumb]
+	public static let cutoutDisplay: Self = "cutout-display"
+	public static let cutoutThumb: Self = "cutout-thumb"
+	public static let known: [Self] = [.original, .display, .thumb, .cutoutDisplay, .cutoutThumb]
 }
 
 public struct SessionMode: OpenEnum {

@@ -181,6 +181,10 @@ public final class LiveWardrobeAPI: WardrobeAPI, Sendable {
 		try await request(method: "POST", path: "/api/photos/\(escapeSegment(id))/complete")
 	}
 
+	public func removePhotoBackground(id: ID) async throws -> PhotoDTO {
+		try await request(method: "POST", path: "/api/photos/\(escapeSegment(id))/background")
+	}
+
 	public func updatePhoto(id: ID, _ body: UpdatePhotoRequest) async throws -> PhotoDTO {
 		let data = try JSONEncoder.wardrobe.encode(body)
 		return try await request(method: "PATCH", path: "/api/photos/\(escapeSegment(id))", bodyData: data)

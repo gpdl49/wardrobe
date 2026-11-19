@@ -3,6 +3,7 @@ import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import {
 	DISPLAY_EDGE,
+	renderCutoutRenditions,
 	renderRenditions,
 	THUMB_EDGE,
 	UnsupportedImageError,
@@ -69,10 +70,7 @@ describe("renderRenditions", () => {
 		})
 			.png()
 			.toBuffer();
-		const { display } = await renderRenditions(plain, {
-			removeBackground: true,
-		});
-		expect((await sharp(display).metadata()).hasAlpha).toBe(false);
+		await expect(renderCutoutRenditions(plain)).resolves.toBeNull();
 	});
 
 	it("keeps existing transparency", async () => {
@@ -86,9 +84,8 @@ describe("renderRenditions", () => {
 		})
 			.png()
 			.toBuffer();
-		const { display } = await renderRenditions(transparent, {
-			removeBackground: true,
-		});
+		await expect(renderCutoutRenditions(transparent)).resolves.toBeNull();
+		const { display } = await renderRenditions(transparent);
 		const rgba = await sharp(display).raw().toBuffer();
 		expect(rgba[3]).toBe(128);
 	});
@@ -98,11 +95,10 @@ describe("renderRenditions", () => {
 		const original = await readFile(
 			new URL("../../test/fixtures/white-shirt.jpg", import.meta.url),
 		);
-		const { display, thumb, width, height } = await renderRenditions(original, {
-			removeBackground: true,
-		});
-		expect([width, height]).toEqual([320, 480]);
-		for (const image of [display, thumb]) {
+		const cutout = await renderCutoutRenditions(original);
+		expect(cutout).not.toBeNull();
+		if (!cutout) throw new Error("Expected a cutout");
+		for (const image of [cutout.display, cutout.thumb]) {
 			const { data, info } = await sharp(image)
 				.raw()
 				.toBuffer({ resolveWithObject: true });

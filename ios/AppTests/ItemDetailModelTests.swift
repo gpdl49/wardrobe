@@ -61,10 +61,16 @@ import WardrobeKitTesting
 
 		#expect(vm.item?.photos.count == 1)
 
+		await vm.removePhotoBackground(photoId: photoId)
+		#expect(vm.item?.photos.first?.backgroundStatus == .ready)
+		#expect(vm.item?.photos.first?.rendition(.display) == .cutoutDisplay)
+		#expect(vm.item?.photos.first?.rendition(.original) == .original)
+
 		// Change photo kind
 		await vm.changePhotoKind(photoId: photoId, kind: .label)
 		let updated1 = try await api.item(id: testItemId)
 		#expect(updated1.photos.first(where: { $0.id == photoId })?.kind == .label)
+		#expect(updated1.photos.first?.rendition(.display) == .display)
 
 		// Set cover photo
 		await vm.setCoverPhoto(photoId: photoId)

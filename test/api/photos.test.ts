@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET as getVariant } from "@/app/api/photos/[id]/[variant]/route";
+import { POST as queueBackground } from "@/app/api/photos/[id]/background/route";
 import { POST as completePhoto } from "@/app/api/photos/[id]/complete/route";
 import {
 	DELETE as deletePhoto,
@@ -10,6 +11,7 @@ import type { PhotoDto, PhotoUploadDto } from "@/lib/api/types";
 import type { User } from "@/lib/auth";
 import { db } from "@/lib/db";
 import type { Prisma } from "@/lib/generated/prisma/client";
+import { photoBackground } from "@/lib/jobs/definitions/photo-background";
 import { photoRenditions } from "@/lib/jobs/definitions/photo-renditions";
 import { MAX_ORIGINAL_BYTES, photoKey } from "@/lib/s3";
 import { describeWithDb, resetDb } from "@/test/helpers/db";
@@ -52,6 +54,12 @@ const complete = (id: string, user?: User) =>
 		routeParams({ id }),
 	);
 
+const removeBackground = (id: string, user?: User) =>
+	queueBackground(
+		apiRequest(`/api/photos/${id}/background`, { method: "POST", user }),
+		routeParams({ id }),
+	);
+
 const variant = (id: string, name: string, user?: User) =>
 	getVariant(
 		apiRequest(`/api/photos/${id}/${name}`, { user }),
@@ -81,6 +89,76 @@ describeWithDb("photos API", () => {
 
 	afterEach(() => {
 		s3.restore();
+	});
+
+	describe("POST /api/photos/{id}/background", () => {
+		it("queues one job for concurrent requests and publishes cutouts only when ready", async () => {
+			const photo = await makePhoto({ status: "ready" });
+			expect((await variant(photo.id, "cutout-display")).status).toBe(404);
+			const responses = await Promise.all([
+				removeBackground(photo.id),
+				removeBackground(photo.id),
+			]);
+			for (const response of responses) {
+				expect(response.status).toBe(202);
+				expect(await json<PhotoDto>(response)).toMatchObject({
+					status: "ready",
+					backgroundStatus: "queued",
+					urls: { display: `/api/photos/${photo.id}/display` },
+				});
+			}
+			expect(enqueue).toHaveBeenCalledExactlyOnceWith(
+				photoBackground,
+				{ photoId: photo.id },
+				expect.objectContaining({ db: expect.any(Object) }),
+			);
+			await db().photo.update({
+				where: { id: photo.id },
+				data: { backgroundStatus: "ready" },
+			});
+			const finished = await removeBackground(photo.id);
+			expect(await json<PhotoDto>(finished)).toMatchObject({
+				backgroundStatus: "ready",
+				urls: {
+					display: `/api/photos/${photo.id}/cutout-display`,
+					thumb: `/api/photos/${photo.id}/cutout-thumb`,
+				},
+			});
+			expect(enqueue).toHaveBeenCalledTimes(1);
+			const cutout = await variant(photo.id, "cutout-display");
+			expect(cutout.status).toBe(302);
+			expect(cutout.headers.get("location")).toContain("cutout-display.webp");
+		});
+
+		it("checks access and rejects photos outside the action's scope", async () => {
+			const photo = await makePhoto({ status: "ready" });
+			expect((await removeBackground(photo.id, OTHER_USER)).status).toBe(404);
+			await share(TEST_USER, OTHER_USER, "view");
+			expect((await removeBackground(photo.id, OTHER_USER)).status).toBe(403);
+			const label = await makePhoto({ status: "ready", kind: "label" });
+			expect((await removeBackground(label.id)).status).toBe(422);
+			const pending = await makePhoto();
+			expect((await removeBackground(pending.id)).status).toBe(409);
+			expect(enqueue).not.toHaveBeenCalled();
+		});
+
+		it("rolls back when queueing fails and lets a failed job be retried", async () => {
+			const photo = await makePhoto({
+				status: "ready",
+				backgroundStatus: "failed",
+			});
+			enqueue.mockRejectedValueOnce(new Error("queue unavailable"));
+			expect((await removeBackground(photo.id)).status).toBe(500);
+			expect(
+				(await db().photo.findUnique({ where: { id: photo.id } }))
+					?.backgroundStatus,
+			).toBe("failed");
+			const retry = await removeBackground(photo.id);
+			expect(retry.status).toBe(202);
+			expect(await json<PhotoDto>(retry)).toMatchObject({
+				backgroundStatus: "queued",
+			});
+		});
 	});
 
 	describe("POST /api/photos", () => {

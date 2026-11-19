@@ -13,7 +13,13 @@ import { type Env, env } from "@/lib/env";
  * Photo storage. Object keys are the contract in docs/wardrobe.md
  * ("Object keys"); always build them with photoKey().
  */
-export const PHOTO_VARIANTS = ["original", "display", "thumb"] as const;
+export const PHOTO_VARIANTS = [
+	"original",
+	"display",
+	"thumb",
+	"cutout-display",
+	"cutout-thumb",
+] as const;
 export type PhotoVariant = (typeof PHOTO_VARIANTS)[number];
 
 export const MAX_ORIGINAL_BYTES = 25 * 1024 * 1024;
@@ -21,14 +27,7 @@ export const UPLOAD_URL_TTL_SECONDS = 15 * 60;
 export const DOWNLOAD_URL_TTL_SECONDS = 5 * 60;
 
 export function photoKey(photoId: string, variant: PhotoVariant): string {
-	switch (variant) {
-		case "original":
-			return `photos/${photoId}/original`;
-		case "display":
-			return `photos/${photoId}/display.webp`;
-		case "thumb":
-			return `photos/${photoId}/thumb.webp`;
-	}
+	return `photos/${photoId}/${variant === "original" ? variant : `${variant}.webp`}`;
 }
 
 type S3Config = Pick<

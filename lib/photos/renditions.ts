@@ -39,12 +39,11 @@ export type Renditions = {
 	blurhash: string;
 };
 
-export async function renderRenditions(
-	input: Uint8Array,
-	{ removeBackground = false } = {},
-): Promise<Renditions> {
+type RawPhoto = { data: Buffer; info: OutputInfo };
+
+async function decodePhoto(input: Uint8Array) {
 	let metadata: Metadata;
-	let oriented: { data: Buffer; info: OutputInfo };
+	let oriented: RawPhoto;
 	try {
 		metadata = await sharp(input).metadata();
 		// Decode once at display size (oriented, sRGB); the rest derives from it.
@@ -64,18 +63,16 @@ export async function renderRenditions(
 		);
 	}
 
-	const photo =
-		(removeBackground && (await removePhotoBackground(oriented))) || oriented;
-	const source = (image: typeof oriented) =>
-		sharp(image.data, {
-			raw: {
-				width: image.info.width,
-				height: image.info.height,
-				channels: image.info.channels,
-			},
-		});
+	return { metadata, oriented };
+}
 
-	const [display, thumb, small] = await Promise.all([
+function source(image: RawPhoto) {
+	const { width, height, channels } = image.info;
+	return sharp(image.data, { raw: { width, height, channels } });
+}
+
+async function encodeWebps(photo: RawPhoto) {
+	const [display, thumb] = await Promise.all([
 		source(photo).webp({ quality: 82 }).toBuffer(),
 		source(photo)
 			.resize(THUMB_EDGE, THUMB_EDGE, {
@@ -84,7 +81,20 @@ export async function renderRenditions(
 			})
 			.webp({ quality: 75 })
 			.toBuffer(),
-		// Blurhash has no alpha channel, so use the original for the placeholder.
+	]);
+	return { display, thumb };
+}
+
+export async function renderCutoutRenditions(input: Uint8Array) {
+	const { oriented } = await decodePhoto(input);
+	const cutout = await removePhotoBackground(oriented);
+	return cutout ? encodeWebps(cutout) : null;
+}
+
+export async function renderRenditions(input: Uint8Array): Promise<Renditions> {
+	const { metadata, oriented } = await decodePhoto(input);
+	const [renditions, small] = await Promise.all([
+		encodeWebps(oriented),
 		source(oriented)
 			.resize(BLURHASH_EDGE, BLURHASH_EDGE, { fit: "inside" })
 			.ensureAlpha()
@@ -102,8 +112,7 @@ export async function renderRenditions(
 	);
 
 	return {
-		display,
-		thumb,
+		...renditions,
 		width: metadata.autoOrient?.width ?? oriented.info.width,
 		height: metadata.autoOrient?.height ?? oriented.info.height,
 		blurhash,

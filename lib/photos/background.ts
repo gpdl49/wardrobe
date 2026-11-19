@@ -14,21 +14,14 @@ const CLEAR = 0.12;
 const SOLID = 0.88;
 
 type RawPhoto = { data: Buffer; info: OutputInfo };
-let session: Promise<InferenceSession | null> | undefined;
+let session: Promise<InferenceSession> | undefined;
 
-async function loadModel(): Promise<InferenceSession | null> {
-	try {
-		const weights = await readFile(
-			join(process.cwd(), "models", "u2netp.onnx"),
-		);
-		env.wasm.numThreads = 1;
-		return await InferenceSession.create(new Uint8Array(weights), {
-			executionProviders: ["wasm"],
-		});
-	} catch (error) {
-		console.warn("[photos] Background removal model unavailable", error);
-		return null;
-	}
+async function loadModel(): Promise<InferenceSession> {
+	const weights = await readFile(join(process.cwd(), "models", "u2netp.onnx"));
+	env.wasm.numThreads = 1;
+	return await InferenceSession.create(new Uint8Array(weights), {
+		executionProviders: ["wasm"],
+	});
 }
 
 function hasTransparency(photo: RawPhoto): boolean {
@@ -64,9 +57,11 @@ function lightNeutralBorder(rgb: Buffer): boolean {
 }
 
 async function foregroundMask(rgb: Buffer): Promise<Buffer | null> {
-	session ??= loadModel();
+	session ??= loadModel().catch((error) => {
+		session = undefined;
+		throw error;
+	});
 	const model = await session;
-	if (!model) return null;
 
 	// U²-Net-P takes a 320×320 RGB tensor in CHW order and outputs a soft mask.
 	const tensor = new Float32Array(PIXELS * 3);
@@ -110,38 +105,33 @@ export async function removePhotoBackground(
 ): Promise<RawPhoto | null> {
 	const { width, height, channels } = photo.info;
 	if (channels < 3 || hasTransparency(photo)) return null;
-	try {
-		const rgb = await sharp(photo.data, { raw: { width, height, channels } })
-			.removeAlpha()
-			.resize(EDGE, EDGE, { fit: "fill" })
-			.raw()
-			.toBuffer();
-		if (!lightNeutralBorder(rgb)) return null;
-		const alpha = await foregroundMask(rgb);
-		if (!alpha) return null;
+	const rgb = await sharp(photo.data, { raw: { width, height, channels } })
+		.removeAlpha()
+		.resize(EDGE, EDGE, { fit: "fill" })
+		.raw()
+		.toBuffer();
+	if (!lightNeutralBorder(rgb)) return null;
+	const alpha = await foregroundMask(rgb);
+	if (!alpha) return null;
 
-		const mask = await sharp(alpha, {
-			raw: { width: EDGE, height: EDGE, channels: 1 },
-		})
-			.resize(width, height, { fit: "fill" })
-			.toColourspace("b-w")
-			.raw()
-			.toBuffer();
-		const rgba = Buffer.alloc(width * height * 4);
-		for (let i = 0; i < mask.length; i++) {
-			const input = i * channels;
-			const output = i * 4;
-			rgba[output] = photo.data[input] as number;
-			rgba[output + 1] = photo.data[input + 1] as number;
-			rgba[output + 2] = photo.data[input + 2] as number;
-			rgba[output + 3] = mask[i] as number;
-		}
-		return {
-			data: rgba,
-			info: { ...photo.info, channels: 4, size: rgba.length },
-		};
-	} catch (error) {
-		console.warn("[photos] Background removal failed", error);
-		return null;
+	const mask = await sharp(alpha, {
+		raw: { width: EDGE, height: EDGE, channels: 1 },
+	})
+		.resize(width, height, { fit: "fill" })
+		.toColourspace("b-w")
+		.raw()
+		.toBuffer();
+	const rgba = Buffer.alloc(width * height * 4);
+	for (let i = 0; i < mask.length; i++) {
+		const input = i * channels;
+		const output = i * 4;
+		rgba[output] = photo.data[input] as number;
+		rgba[output + 1] = photo.data[input + 1] as number;
+		rgba[output + 2] = photo.data[input + 2] as number;
+		rgba[output + 3] = mask[i] as number;
 	}
+	return {
+		data: rgba,
+		info: { ...photo.info, channels: 4, size: rgba.length },
+	};
 }
