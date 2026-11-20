@@ -90,14 +90,6 @@ struct NewItemView: View {
 					.disabled(model.isCreating)
 				}
 			}
-			.confirmationDialog(
-				"Add \(pickingSlot?.title.lowercased() ?? "") photo",
-				isPresented: $showingSourceDialog,
-				titleVisibility: .visible
-			) {
-				Button("Take photo") { model.showingCamera = true }
-				Button("Choose from library") { model.showingPhotosPicker = true }
-			}
 			.sheet(isPresented: $model.showingCamera) {
 				CameraPickerView { data in
 					store(data)
@@ -134,6 +126,11 @@ struct NewItemView: View {
 
 	@ViewBuilder
 	private func slotTile(_ slot: PhotoSlot) -> some View {
+		sourceDialog(on: slotTileContent(slot), presented: pickingSlot == slot)
+	}
+
+	@ViewBuilder
+	private func slotTileContent(_ slot: PhotoSlot) -> some View {
 		VStack(spacing: 6) {
 			if let thumbnail = thumbnails[slot] {
 				Menu {
@@ -162,6 +159,11 @@ struct NewItemView: View {
 	}
 
 	private var addDetailTile: some View {
+		let addingDetail = pickingSlot.map { !model.slots.contains($0) } ?? false
+		return sourceDialog(on: addDetailTileContent, presented: addingDetail)
+	}
+
+	private var addDetailTileContent: some View {
 		VStack(spacing: 6) {
 			Button { choose(.detail(UUID())) } label: {
 				emptyTile(systemImage: "plus.viewfinder")
@@ -171,6 +173,22 @@ struct NewItemView: View {
 			Text("Add detail")
 				.font(.caption)
 				.foregroundStyle(.secondary)
+		}
+	}
+
+	/// The camera-or-library choice on the tile that asked for it, so its
+	/// popover points at that tile.
+	private func sourceDialog(on tile: some View, presented: Bool) -> some View {
+		tile.confirmationDialog(
+			"Add \(pickingSlot?.title.lowercased() ?? "") photo",
+			isPresented: Binding(
+				get: { showingSourceDialog && presented },
+				set: { showingSourceDialog = $0 }
+			),
+			titleVisibility: .visible
+		) {
+			Button("Take photo") { model.showingCamera = true }
+			Button("Choose from library") { model.showingPhotosPicker = true }
 		}
 	}
 

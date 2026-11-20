@@ -130,20 +130,15 @@ struct OutfitDetailView: View {
 				ToolbarItemGroup(placement: .primaryAction) {
 					Button("Edit") { editing = true }.keyboardShortcut("e", modifiers: .command)
 					Button("Delete", role: .destructive) { deleting = true }
+						.confirmationDialog("Delete \(outfit.name)?", isPresented: $deleting, titleVisibility: .visible) {
+							Button("Delete", role: .destructive) { Task { if await model.delete() { dismiss() } } }
+						}
 				}
 			}
 		}
 		.sheet(isPresented: $editing) {
 			OutfitBuilderView(ownerId: outfit.ownerId, outfit: outfit) { updated in
 				model.outfit = updated; editing = false
-			}
-		}
-		.confirmationDialog("Delete \(outfit.name)?", isPresented: $deleting, titleVisibility: .visible) {
-			Button("Delete", role: .destructive) { Task { if await model.delete() { dismiss() } } }
-		}
-		.confirmationDialog("Stop sharing?", isPresented: Binding(get: { revoke != nil }, set: { if !$0 { revoke = nil } })) {
-			Button("Stop sharing", role: .destructive) {
-				if let share = revoke { Task { await model.revoke(share) } }; revoke = nil
 			}
 		}
 		.errorAlert($model.errorMessage)
@@ -171,6 +166,14 @@ struct OutfitDetailView: View {
 				ForEach(outfit.shares) { share in
 					Text(share.grantee.displayName).swipeActions {
 						Button("Revoke", role: .destructive) { revoke = share }
+					}
+					.confirmationDialog(
+						"Stop sharing?",
+						isPresented: Binding(get: { revoke?.id == share.id }, set: { if !$0 { revoke = nil } })
+					) {
+						Button("Stop sharing", role: .destructive) {
+							Task { await model.revoke(share) }; revoke = nil
+						}
 					}
 				}
 				TextField("Email or username", text: $grantee).textInputAutocapitalization(.never).autocorrectionDisabled()

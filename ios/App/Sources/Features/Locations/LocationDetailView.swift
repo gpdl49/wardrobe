@@ -61,25 +61,6 @@ public struct LocationDetailView: View {
 			get: { detailModel?.errorMessage },
 			set: { detailModel?.errorMessage = $0 }
 		))
-		.confirmationDialog(
-			"Delete \(detailModel?.detail?.code ?? "Location")?",
-			isPresented: $showingDeleteConfirmation,
-			titleVisibility: .visible
-		) {
-			Button("Delete Location", role: .destructive) {
-				Task {
-					do {
-						try await detailModel?.delete()
-						dismiss()
-					} catch {
-						// Error handled by detailModel.errorMessage
-					}
-				}
-			}
-			Button("Cancel", role: .cancel) {}
-		} message: {
-			Text("The location is deleted. Its QR label will stop working.")
-		}
 		.sheet(isPresented: $showingEditSheet) {
 			if let loc = detailModel?.detail?.location {
 				LocationFormView(
@@ -304,6 +285,25 @@ public struct LocationDetailView: View {
 						Image(systemName: "ellipsis.circle")
 							.imageScale(.large)
 							.padding(8)
+					}
+					.confirmationDialog(
+						"Delete \(detail.code)?",
+						isPresented: $showingDeleteConfirmation,
+						titleVisibility: .visible
+					) {
+						Button("Delete Location", role: .destructive) {
+							Task {
+								do {
+									try await detailModel.delete()
+									dismiss()
+								} catch {
+									// Error handled by detailModel.errorMessage
+								}
+							}
+						}
+						Button("Cancel", role: .cancel) {}
+					} message: {
+						Text("The location is deleted. Its QR label will stop working.")
 					}
 				}
 			}
