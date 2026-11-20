@@ -73,44 +73,24 @@ struct ItemDetailView: View {
 					} label: {
 						Label("Delete", systemImage: "trash")
 					}
-				}
-			}
-		}
-		.confirmationDialog(
-			"Delete \(vm.item?.name ?? "item")?",
-			isPresented: Binding(get: { vm.isShowingDeleteAlert }, set: { vm.isShowingDeleteAlert = $0 }),
-			titleVisibility: .visible
-		) {
-			Button("Delete", role: .destructive) {
-				Task {
-					if await vm.deleteItem() {
-						dismiss()
+					.confirmationDialog(
+						"Delete \(vm.item?.name ?? "item")?",
+						isPresented: Binding(get: { vm.isShowingDeleteAlert }, set: { vm.isShowingDeleteAlert = $0 }),
+						titleVisibility: .visible
+					) {
+						Button("Delete", role: .destructive) {
+							Task {
+								if await vm.deleteItem() {
+									dismiss()
+								}
+							}
+						}
+						Button("Cancel", role: .cancel) {}
+					} message: {
+						Text("The item, its photos and its history are deleted. This cannot be undone.")
 					}
 				}
 			}
-			Button("Cancel", role: .cancel) {}
-		} message: {
-			Text("The item, its photos and its history are deleted. This cannot be undone.")
-		}
-		.confirmationDialog(
-			"Delete photo?",
-			isPresented: Binding(
-				get: { vm.photoToDelete != nil },
-				set: { if !$0 { vm.photoToDelete = nil } }
-			),
-			titleVisibility: .visible
-		) {
-			Button("Delete photo", role: .destructive) {
-				if let photo = vm.photoToDelete {
-					Task { await vm.deletePhoto(photoId: photo.id) }
-				}
-				vm.photoToDelete = nil
-			}
-			Button("Cancel", role: .cancel) {
-				vm.photoToDelete = nil
-			}
-		} message: {
-			Text("This photo will be permanently removed.")
 		}
 		.sheet(isPresented: Binding(get: { vm.isEditing }, set: { vm.isEditing = $0 })) {
 			if let item = vm.item {
@@ -312,6 +292,24 @@ struct ItemDetailView: View {
 												.shadow(radius: 2)
 										}
 										.accessibilityLabel("Photo options")
+										.confirmationDialog(
+											"Delete photo?",
+											isPresented: Binding(
+												get: { vm.photoToDelete?.id == photo.id },
+												set: { if !$0 { vm.photoToDelete = nil } }
+											),
+											titleVisibility: .visible
+										) {
+											Button("Delete photo", role: .destructive) {
+												Task { await vm.deletePhoto(photoId: photo.id) }
+												vm.photoToDelete = nil
+											}
+											Button("Cancel", role: .cancel) {
+												vm.photoToDelete = nil
+											}
+										} message: {
+											Text("This photo will be permanently removed.")
+										}
 									}
 								}
 								.padding(8)

@@ -43,18 +43,6 @@ private struct SettingsContent: View {
 			aboutSection
 			signOutSection
 		}
-		.confirmationDialog(
-			"Sign out of Wardrobe?",
-			isPresented: $viewModel.showSignOutConfirmation,
-			titleVisibility: .visible
-		) {
-			Button("Sign out", role: .destructive) {
-				Task { await appModel.signOut() }
-			}
-			Button("Cancel", role: .cancel) {}
-		} message: {
-			Text("You will need to sign in again to access your wardrobe.")
-		}
 	}
 
 	// MARK: - Account Section
@@ -190,6 +178,18 @@ private struct SettingsContent: View {
 					Text("Sign out")
 					Spacer()
 				}
+			}
+			.confirmationDialog(
+				"Sign out of Wardrobe?",
+				isPresented: $viewModel.showSignOutConfirmation,
+				titleVisibility: .visible
+			) {
+				Button("Sign out", role: .destructive) {
+					Task { await appModel.signOut() }
+				}
+				Button("Cancel", role: .cancel) {}
+			} message: {
+				Text("You will need to sign in again to access your wardrobe.")
 			}
 		}
 	}

@@ -43,6 +43,9 @@ struct ImmichSettingsSection: View {
 					} else if status.connected {
 						Text("Connected as \(status.user?.email ?? status.user?.name ?? "Immich user")")
 						Button("Disconnect", role: .destructive) { confirming = true }
+							.confirmationDialog("Disconnect Immich?", isPresented: $confirming, titleVisibility: .visible) {
+								Button("Disconnect", role: .destructive) { Task { await model.disconnect() } }
+							} message: { Text("Photos you linked from Immich will stop loading until you reconnect.") }
 					} else {
 						@Bindable var model = model
 						SecureField("Immich API key", text: $model.key)
@@ -63,9 +66,6 @@ struct ImmichSettingsSection: View {
 				await value.load()
 			}
 		}
-		.confirmationDialog("Disconnect Immich?", isPresented: $confirming, titleVisibility: .visible) {
-			Button("Disconnect", role: .destructive) { Task { await model?.disconnect() } }
-		} message: { Text("Photos you linked from Immich will stop loading until you reconnect.") }
 	}
 }
 

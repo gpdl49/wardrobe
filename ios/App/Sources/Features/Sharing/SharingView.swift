@@ -44,24 +44,6 @@ private struct SharingContent: View {
 			await viewModel.load(appModel: appModel)
 		}
 		.errorAlert($viewModel.errorMessage)
-		.confirmationDialog(
-			"Stop sharing with \(viewModel.shareToRevoke?.grantee.displayName ?? "this user")?",
-			isPresented: $viewModel.showRevokeConfirmation,
-			titleVisibility: .visible
-		) {
-			Button("Stop sharing", role: .destructive) {
-				Task { await viewModel.confirmRevoke(appModel: appModel) }
-			}
-			Button("Cancel", role: .cancel) {
-				viewModel.shareToRevoke = nil
-			}
-		} message: {
-			if let share = viewModel.shareToRevoke {
-				let who = share.grantee.displayName
-				let scopeDesc = share.location.map { "\($0.code) · \($0.name)" } ?? "your whole wardrobe"
-				Text("\(who) loses access to \(scopeDesc). Photo links they already opened keep working for up to 10 minutes.")
-			}
-		}
 	}
 
 	// MARK: - "Shared by me" Section
@@ -85,6 +67,24 @@ private struct SharingContent: View {
 						} label: {
 							Label("Revoke", systemImage: "trash")
 						}
+					}
+					.confirmationDialog(
+						"Stop sharing with \(share.grantee.displayName)?",
+						isPresented: Binding(
+							get: { viewModel.showRevokeConfirmation && viewModel.shareToRevoke?.id == share.id },
+							set: { viewModel.showRevokeConfirmation = $0 }
+						),
+						titleVisibility: .visible
+					) {
+						Button("Stop sharing", role: .destructive) {
+							Task { await viewModel.confirmRevoke(appModel: appModel) }
+						}
+						Button("Cancel", role: .cancel) {
+							viewModel.shareToRevoke = nil
+						}
+					} message: {
+						let scope = share.location.map { "\($0.code) · \($0.name)" } ?? "your whole wardrobe"
+						Text("\(share.grantee.displayName) loses access to \(scope). Photo links they already opened keep working for up to 10 minutes.")
 					}
 				}
 			}
