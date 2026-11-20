@@ -14,6 +14,7 @@ export const photoBackground = defineJob({
 		retryLimit: RETRY_LIMIT,
 		retryDelay: 5,
 		retryBackoff: true,
-		expireInSeconds: 120,
+		// The cutout service takes ~20 s per photo and works one at a time.
+		expireInSeconds: 300,
 	},
 });

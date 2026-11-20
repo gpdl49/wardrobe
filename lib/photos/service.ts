@@ -273,7 +273,10 @@ export async function queuePhotoBackground(
 				id: photo.id,
 				kind: { in: ["main", "back"] },
 				status: "ready",
-				OR: [{ backgroundStatus: null }, { backgroundStatus: "failed" }],
+				OR: [
+					{ backgroundStatus: null },
+					{ backgroundStatus: { in: ["failed", "skipped"] } },
+				],
 			},
 			data: { backgroundStatus: "queued" },
 		});

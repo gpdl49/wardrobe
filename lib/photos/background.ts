@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { env, InferenceSession, Tensor } from "onnxruntime-web/wasm";
 import sharp, { type OutputInfo } from "sharp";
+import { env as appEnv } from "@/lib/env";
 import { type Frame, garmentFrame } from "@/lib/photos/frame";
 
 const EDGE = 320;
@@ -85,11 +86,19 @@ async function foregroundMask(rgb: Buffer): Promise<Buffer | null> {
 	if (!(scores instanceof Float32Array) || scores.length !== PIXELS)
 		return null;
 	if (borderShare((i) => (scores[i] as number) <= CLEAR) < 0.75) return null;
+	return confidentAlpha(scores);
+}
 
+/**
+ * Turns soft scores (0–1) into an alpha mask, or null when the mask is not a
+ * confident single subject: too little solid garment or too little clear
+ * background.
+ */
+function confidentAlpha(scores: ArrayLike<number>): Buffer | null {
 	let solid = 0;
 	let clear = 0;
-	const alpha = Buffer.alloc(PIXELS);
-	for (let i = 0; i < PIXELS; i++) {
+	const alpha = Buffer.alloc(scores.length);
+	for (let i = 0; i < scores.length; i++) {
 		const score = scores[i] as number;
 		if (!Number.isFinite(score)) return null;
 		if (score <= CLEAR) clear++;
@@ -97,7 +106,66 @@ async function foregroundMask(rgb: Buffer): Promise<Buffer | null> {
 		const coverage = (score - CLEAR) / (SOLID - CLEAR);
 		alpha[i] = Math.round(Math.max(0, Math.min(1, coverage)) * 255);
 	}
-	return solid >= PIXELS * 0.04 && clear >= PIXELS * 0.12 ? alpha : null;
+	return solid >= scores.length * 0.04 && clear >= scores.length * 0.12
+		? alpha
+		: null;
+}
+
+/** Thrown when the cutout service fails; the job retries or records `failed`. */
+export class CutoutServiceError extends Error {
+	constructor(message: string, options?: { cause?: unknown }) {
+		super(message, options);
+		this.name = "CutoutServiceError";
+	}
+}
+
+const SERVICE_TIMEOUT_MS = 100_000;
+
+/**
+ * Asks the cutout service (services/cutout, BiRefNet) for the garment mask.
+ * It handles any backdrop, so there is no border pre-check. Returns the
+ * alpha at the mask's own resolution.
+ */
+async function serviceMask(
+	baseUrl: string,
+	photo: RawPhoto,
+	fetchImpl: typeof fetch,
+): Promise<{ alpha: Buffer; edge: number } | null> {
+	const { width, height, channels } = photo.info;
+	const jpeg = await sharp(photo.data, { raw: { width, height, channels } })
+		.removeAlpha()
+		.jpeg({ quality: 92 })
+		.toBuffer();
+	let response: Response;
+	try {
+		response = await fetchImpl(`${baseUrl}/mask`, {
+			method: "POST",
+			headers: { "content-type": "image/jpeg" },
+			body: new Uint8Array(jpeg),
+			signal: AbortSignal.timeout(SERVICE_TIMEOUT_MS),
+		});
+	} catch (error) {
+		throw new CutoutServiceError(
+			`Cutout service unreachable: ${(error as Error).message}`,
+			{ cause: error },
+		);
+	}
+	if (!response.ok) {
+		throw new CutoutServiceError(
+			`Cutout service returned HTTP ${response.status}`,
+		);
+	}
+	const { data, info } = await sharp(Buffer.from(await response.arrayBuffer()))
+		.toColourspace("b-w")
+		.raw()
+		.toBuffer({ resolveWithObject: true });
+	if (info.channels !== 1 || info.width !== info.height) {
+		throw new CutoutServiceError("Cutout service returned an unexpected mask");
+	}
+	const scores = new Float32Array(data.length);
+	for (let i = 0; i < data.length; i++) scores[i] = (data[i] as number) / 255;
+	const alpha = confidentAlpha(scores);
+	return alpha ? { alpha, edge: info.width } : null;
 }
 
 /** Crops to `frame`, padding with transparency where it leaves the image. */
@@ -120,15 +188,11 @@ async function cropToFrame(photo: RawPhoto, frame: Frame): Promise<RawPhoto> {
 		.toBuffer({ resolveWithObject: true });
 }
 
-/**
- * Best-effort cutout of one garment photographed on a light neutral backdrop,
- * auto-cropped to the garment (lib/photos/frame).
- */
-export async function removePhotoBackground(
+/** The local U²-Net-P mask; only for light, neutral backdrops. */
+async function localMask(
 	photo: RawPhoto,
-): Promise<RawPhoto | null> {
+): Promise<{ alpha: Buffer; edge: number } | null> {
 	const { width, height, channels } = photo.info;
-	if (channels < 3 || hasTransparency(photo)) return null;
 	const rgb = await sharp(photo.data, { raw: { width, height, channels } })
 		.removeAlpha()
 		.resize(EDGE, EDGE, { fit: "fill" })
@@ -136,10 +200,30 @@ export async function removePhotoBackground(
 		.toBuffer();
 	if (!lightNeutralBorder(rgb)) return null;
 	const alpha = await foregroundMask(rgb);
-	if (!alpha) return null;
+	return alpha ? { alpha, edge: EDGE } : null;
+}
+
+/**
+ * Best-effort cutout of one garment, auto-cropped to it (lib/photos/frame).
+ * With CUTOUT_URL the cutout service handles any backdrop; without it the
+ * local model needs a light, neutral one. Null when the mask is uncertain;
+ * throws CutoutServiceError when the service fails.
+ */
+export async function removePhotoBackground(
+	photo: RawPhoto,
+	deps: { fetch?: typeof fetch } = {},
+): Promise<RawPhoto | null> {
+	const { width, height, channels } = photo.info;
+	if (channels < 3 || hasTransparency(photo)) return null;
+	const service = appEnv().CUTOUT_URL;
+	const found = service
+		? await serviceMask(service, photo, deps.fetch ?? fetch)
+		: await localMask(photo);
+	if (!found) return null;
+	const { alpha, edge } = found;
 
 	const mask = await sharp(alpha, {
-		raw: { width: EDGE, height: EDGE, channels: 1 },
+		raw: { width: edge, height: edge, channels: 1 },
 	})
 		.resize(width, height, { fit: "fill" })
 		.toColourspace("b-w")
@@ -158,6 +242,6 @@ export async function removePhotoBackground(
 		data: rgba,
 		info: { ...photo.info, channels: 4 as const, size: rgba.length },
 	};
-	const frame = garmentFrame(alpha, EDGE, EDGE, width, height);
+	const frame = garmentFrame(alpha, edge, edge, width, height);
 	return frame ? cropToFrame(cutout, frame) : cutout;
 }

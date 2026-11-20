@@ -71,6 +71,26 @@ describe("ItemDetail controls", () => {
 		expect(queue).toHaveBeenCalledTimes(1);
 	});
 
+	it("offers to try a skipped photo again", async () => {
+		const queue = vi.fn(() =>
+			Response.json(
+				{ ...mainPhoto, backgroundStatus: "queued" },
+				{ status: 202 },
+			),
+		);
+		mockApi({
+			"GET /api/items/item-1": () =>
+				itemDetail({ photos: [{ ...mainPhoto, backgroundStatus: "skipped" }] }),
+			"POST /api/photos/photo-1/background": queue,
+		});
+		renderWithQuery(<ItemDetail id="item-1" />);
+		expect(
+			await screen.findByText("Couldn’t isolate the garment"),
+		).toBeInTheDocument();
+		await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+		expect(queue).toHaveBeenCalledTimes(1);
+	});
+
 	it("hides every write for view access", async () => {
 		await show("view");
 		for (const name of [

@@ -363,16 +363,25 @@ struct ItemDetailView: View {
 	private func photoBackgroundButton(photo: PhotoDTO, vm: ItemDetailModel) -> some View {
 		if photo.backgroundStatus == .queued || vm.requestingBackgroundFor.contains(photo.id) {
 			ProgressView("Removing background…").font(.subheadline)
-		} else if photo.backgroundStatus == .skipped {
-			Text("Couldn’t isolate the garment").font(.subheadline).foregroundStyle(.secondary)
 		} else if photo.backgroundStatus != .ready {
-			Button {
-				Task { await vm.removePhotoBackground(photoId: photo.id) }
-			} label: {
-				Label(photo.backgroundStatus == .failed ? "Retry background removal" : "Remove background", systemImage: "scissors")
+			HStack(spacing: 10) {
+				if photo.backgroundStatus == .skipped {
+					Text("Couldn’t isolate the garment").font(.subheadline).foregroundStyle(.secondary)
+				}
+				Button {
+					Task { await vm.removePhotoBackground(photoId: photo.id) }
+				} label: {
+					Label(backgroundActionTitle(photo.backgroundStatus), systemImage: "scissors")
+				}
+				.buttonStyle(.bordered)
 			}
-			.buttonStyle(.bordered)
 		}
+	}
+
+	private func backgroundActionTitle(_ status: PhotoBackgroundStatus?) -> String {
+		if status == .failed { return "Retry background removal" }
+		if status == .skipped { return "Try again" }
+		return "Remove background"
 	}
 
 	@ViewBuilder

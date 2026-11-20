@@ -65,6 +65,13 @@ const envSchema = z
 					"must be base64 of exactly 32 bytes",
 				),
 		),
+		/**
+		 * Cutout service base URL (services/cutout, BiRefNet). Unset: background
+		 * removal uses the local U²-Net-P, which needs a light, plain backdrop.
+		 */
+		CUTOUT_URL: optional(
+			z.url({ protocol: /^https?$/ }).transform((v) => v.replace(/\/+$/, "")),
+		),
 		/** Not in the contract: "false" keeps the pg-boss worker from starting. */
 		JOBS_ENABLED: withDefault(
 			z.enum(["true", "false"]).transform((v) => v === "true"),
