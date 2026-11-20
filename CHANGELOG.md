@@ -6,6 +6,18 @@ version, following [Semantic Versioning](https://semver.org/). After 1.0.0,
 [Conventional Commit](https://www.conventionalcommits.org/) titles of merged PRs; see
 [docs/releasing.md](docs/releasing.md#releases-maintainers).
 
+## [1.3.0](https://github.com/gpdl49/wardrobe/compare/v1.2.0...v1.3.0) (2026-11-20)
+
+
+### Added
+
+* **photos:** remove backgrounds on any backdrop with BiRefNet ([#24](https://github.com/gpdl49/wardrobe/issues/24)) ([300c634](https://github.com/gpdl49/wardrobe/commit/300c63414ebffc0e67c72ba0a80530f17ec8c8c4))
+
+
+### Fixed
+
+* **ios:** point confirmation popovers at the button that opened them ([#26](https://github.com/gpdl49/wardrobe/issues/26)) ([a2c3a72](https://github.com/gpdl49/wardrobe/commit/a2c3a727824e06c8d4321f50d0573ddc940a7fb9))
+
 ## [1.2.0](https://github.com/gpdl49/wardrobe/compare/v1.1.0...v1.2.0) (2026-11-19)
 
 
