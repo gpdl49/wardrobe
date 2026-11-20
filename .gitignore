@@ -27,3 +27,5 @@ mise.local.toml
 
 # checksum-pinned photo model (mise run setup)
 /models/
+/services/cutout/models/
+/services/cutout/node_modules/

@@ -138,7 +138,7 @@ Client rules:
   poll the item detail. On `ready`, use `cutout-display` and `cutout-thumb` as
   separate cache variants. Cutouts are cropped to the garment at 4:5 with a
   margin, so draw them aspect-fit (never fill). On `skipped` or `failed`,
-  show the ordinary photo.
+  show the ordinary photo and offer to try again (the same POST re-queues it).
 - **Placeholders**: show the photo's `blurhash` (decoded on device) until the
   thumb loads; `status != ready` shows a progress placeholder and the app polls
   `GET /api/items/{id}` every 2 s (max 60 s) while a photo of an open item is

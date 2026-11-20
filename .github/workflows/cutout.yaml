@@ -1,0 +1,84 @@
+name: Cutout
+
+# Builds and publishes the cutout service image (services/cutout,
+# Dockerfile.cutout). It carries the ~1 GB BiRefNet model, so it is built
+# only when the service changes, not on every app push.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - services/cutout/**
+      - Dockerfile.cutout
+      - .github/workflows/cutout.yaml
+  pull_request:
+    paths:
+      - services/cutout/**
+      - Dockerfile.cutout
+      - .github/workflows/cutout.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    # GitHub-hosted, as in ci.yaml: buildah needs the privileged container.
+    container:
+      image: quay.io/buildah/stable:v1.43.5@sha256:a6f96bfffc47f36462985573d85e87f782bf2d8b37e02cb3dd307713bfa6cc13
+      options: --privileged
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build image
+        run: |
+          buildah --storage-driver=vfs bud \
+            --isolation=chroot \
+            --file Dockerfile.cutout \
+            --tag ghcr.io/gpdl49/wardrobe-cutout:main \
+            --tag ghcr.io/gpdl49/wardrobe-cutout:main-${{ github.sha }} \
+            .
+
+      # Starts the service from the image and asks for one mask, so a broken
+      # runtime or model never reaches main.
+      - name: Smoke test
+        run: |
+          buildah --storage-driver=vfs from --name cutout ghcr.io/gpdl49/wardrobe-cutout:main
+          buildah --storage-driver=vfs run --isolation=chroot cutout -- \
+            node -e '
+              process.env.PORT = "18080";
+              import("/srv/server.mjs").then(async () => {
+                for (let i = 0; i < 120; i++) {
+                  try { if ((await fetch("http://127.0.0.1:18080/healthz")).ok) break; } catch {}
+                  await new Promise((r) => setTimeout(r, 1000));
+                }
+                const sharp = (await import("sharp")).default;
+                const image = await sharp({ create: { width: 64, height: 64, channels: 3, background: "#ffffff" } }).jpeg().toBuffer();
+                const response = await fetch("http://127.0.0.1:18080/mask", { method: "POST", body: image });
+                const meta = await sharp(Buffer.from(await response.arrayBuffer())).metadata();
+                console.log("mask", response.status, meta.width, meta.height, meta.channels);
+                process.exit(response.ok && meta.width === 1024 && meta.channels === 1 ? 0 : 1);
+              });'
+          buildah --storage-driver=vfs rm cutout
+
+      - name: Login to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          printf '%s' '${{ secrets.GITHUB_TOKEN }}' | buildah login ghcr.io \
+            --username '${{ github.actor }}' \
+            --password-stdin
+
+      - name: Push image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          for tag in ghcr.io/gpdl49/wardrobe-cutout:main ghcr.io/gpdl49/wardrobe-cutout:main-${{ github.sha }}; do
+            buildah --storage-driver=vfs push --tls-verify=true "$tag" "docker://$tag"
+          done

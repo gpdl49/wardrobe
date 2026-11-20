@@ -10,6 +10,7 @@ process.env.AUTH_MODE = "proxy";
 process.env.REQUIRED_GROUP = "wardrobe";
 process.env.JOBS_ENABLED = "false";
 process.env.S3_ENDPOINT = "";
+process.env.CUTOUT_URL = "";
 resetEnvCache();
 
 afterAll(async () => {

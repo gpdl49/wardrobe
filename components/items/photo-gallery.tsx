@@ -177,27 +177,32 @@ export function PhotoGallery({
 						<a className="text-muted underline" href={current.urls.original}>
 							View original
 						</a>
-					) : current.backgroundStatus === "skipped" ? (
-						<span role="status" className="text-muted">
-							Couldn’t isolate the garment
-						</span>
 					) : (
-						<Button
-							variant="secondary"
-							size="sm"
-							disabled={
-								current.backgroundStatus === "queued" ||
+						<>
+							{current.backgroundStatus === "skipped" ? (
+								<span role="status" className="text-muted">
+									Couldn’t isolate the garment
+								</span>
+							) : null}
+							<Button
+								variant="secondary"
+								size="sm"
+								disabled={
+									current.backgroundStatus === "queued" ||
+									requestingBackgroundFor === current.id
+								}
+								onClick={() => onRemoveBackground(current.id)}
+							>
+								{current.backgroundStatus === "queued" ||
 								requestingBackgroundFor === current.id
-							}
-							onClick={() => onRemoveBackground(current.id)}
-						>
-							{current.backgroundStatus === "queued" ||
-							requestingBackgroundFor === current.id
-								? "Removing background…"
-								: current.backgroundStatus === "failed"
-									? "Retry background removal"
-									: "Remove background"}
-						</Button>
+									? "Removing background…"
+									: current.backgroundStatus === "failed"
+										? "Retry background removal"
+										: current.backgroundStatus === "skipped"
+											? "Try again"
+											: "Remove background"}
+							</Button>
+						</>
 					)}
 				</div>
 			) : null}

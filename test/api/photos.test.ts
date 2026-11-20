@@ -176,6 +176,19 @@ describeWithDb("photos API", () => {
 				backgroundStatus: "queued",
 			});
 		});
+
+		it("lets a skipped photo be tried again", async () => {
+			const photo = await makePhoto({
+				status: "ready",
+				backgroundStatus: "skipped",
+			});
+			const retry = await removeBackground(photo.id);
+			expect(retry.status).toBe(202);
+			expect(await json<PhotoDto>(retry)).toMatchObject({
+				backgroundStatus: "queued",
+			});
+			expect(enqueue).toHaveBeenCalledTimes(1);
+		});
 	});
 
 	describe("POST /api/photos", () => {

@@ -1,0 +1,6 @@
+# Standalone from the app's workspace: its own lockfile and image
+# (Dockerfile.cutout). onnxruntime-node's install script only fetches CUDA
+# binaries, which the CPU-only service does not use.
+allowBuilds:
+  sharp: true
+  onnxruntime-node: false

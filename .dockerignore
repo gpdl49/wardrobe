@@ -10,3 +10,5 @@ models
 compose.yaml
 Dockerfile
 .dockerignore
+services/cutout/node_modules
+services/cutout/models

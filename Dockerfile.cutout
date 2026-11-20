@@ -1,0 +1,38 @@
+# syntax=docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+
+# The cutout service (services/cutout): BiRefNet on the native ONNX runtime,
+# which needs glibc, so Debian slim rather than the app's Alpine. Runs as UID
+# 65532 with a read-only root filesystem; only /tmp is writable.
+
+FROM node:24-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS base
+ARG AUBE_VERSION=2.9.0
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates curl \
+  && rm -rf /var/lib/apt/lists/* \
+  && arch="$(uname -m)" \
+  && case "$arch" in \
+    x86_64) target=x86_64-unknown-linux-gnu ;; \
+    aarch64) target=aarch64-unknown-linux-gnu ;; \
+    *) echo "unsupported arch: $arch" >&2; exit 1 ;; \
+  esac \
+  && curl -fsSL "https://github.com/aubepkg/aube/releases/download/v${AUBE_VERSION}/aube-v${AUBE_VERSION}-${target}.tar.gz" \
+  | tar -xz -C /usr/local/bin aube
+
+FROM base AS deps
+WORKDIR /srv
+COPY services/cutout/package.json services/cutout/pnpm-lock.yaml services/cutout/pnpm-workspace.yaml services/cutout/.npmrc ./
+RUN CI=true aube install --prod --frozen-lockfile
+COPY services/cutout/fetch-model.mjs ./
+RUN node fetch-model.mjs
+
+FROM node:24-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS runner
+WORKDIR /srv
+ENV NODE_ENV=production \
+    PORT=8080 \
+    HOME=/tmp
+COPY --from=deps /srv/node_modules ./node_modules
+COPY --from=deps /srv/models ./models
+COPY services/cutout/package.json services/cutout/server.mjs ./
+USER 65532:65532
+EXPOSE 8080
+CMD ["node", "server.mjs"]
