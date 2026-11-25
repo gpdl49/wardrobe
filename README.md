@@ -148,3 +148,12 @@ See [docs/ios/](docs/ios/) for architecture, development plan, and setup.
 
 Versioned releases of the web app, container image and iOS app are described in
 [docs/releasing.md](docs/releasing.md).
+
+## License
+
+Copyright (C) 2026 vidurb.
+
+Wardrobe is free software under the
+[GNU Affero General Public License](LICENSE), version 3 or later. If you run a
+modified version as a network service, you must offer its source to its users.
+Bundled third-party code and models keep their own licenses.
