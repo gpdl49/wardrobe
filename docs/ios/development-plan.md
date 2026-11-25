@@ -329,10 +329,11 @@ tests) natively.
   `ci.yaml`, `permissions: contents: read`):
   - Triggers: `pull_request` and `push` to `main` with `paths: [ios/**,
     docs/ios/**, .github/workflows/ios.yaml]`, plus `workflow_dispatch`.
-  - `test` job on `macos-26`: select the newest `/Applications/Xcode_27*.app`,
-    install `xcodegen` (mise, pinned version), `swift test` for WardrobeKit,
-    generate, `xcodebuild test` on an iPhone simulator and `build` for an
-    iPad simulator, unsigned.
+  - Both jobs use GitHub's `xcode-27` runner and pin Xcode 27.2 with
+    `DEVELOPER_DIR`.
+  - `test` installs `xcodegen` (mise, pinned version), runs `swift test`
+    for WardrobeKit, generates the project, tests on an iPhone simulator
+    and builds for an iPad simulator, both on iOS 27.2 and unsigned.
   - `testflight` job: needs `test`; only on `push` to `main` or
     `workflow_dispatch` on `main`; `concurrency: ios-testflight`
     (no cancel). Fails fast with clear messages when `ASC_KEY_ID`,
@@ -342,7 +343,8 @@ tests) natively.
     `CURRENT_PROJECT_VERSION=${{ github.run_number }}`,
     `WARDROBE_OIDC_CLIENT_ID=${{ vars.IOS_OIDC_CLIENT_ID }}`,
     `-allowProvisioningUpdates` + `-authenticationKeyPath/-ID/-IssuerID`),
-    then `xcodebuild -exportArchive` with `ios/ExportOptions.plist`
+    verifies the archived app was built with iOS SDK 27 or later, then
+    runs `xcodebuild -exportArchive` with `ios/ExportOptions.plist`
     (`method: app-store-connect`, `destination: upload`, `teamID:
     2J2LYH5QBS`, `signingStyle: automatic`, `uploadSymbols: true`,
     `manageAppVersionAndBuildNumber: false`), and always deletes the key.

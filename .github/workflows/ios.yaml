@@ -20,25 +20,24 @@ on:
 permissions:
   contents: read
 
+env:
+  DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Select Xcode 27
+      - name: Show Xcode and iOS SDK versions
         run: |
-          XCODE_APP=$(find /Applications -maxdepth 1 -name "Xcode_27*.app" 2>/dev/null | sort -V | tail -n 1)
-          if [ -n "$XCODE_APP" ]; then
-            echo "Selecting $XCODE_APP"
-            sudo xcode-select -s "$XCODE_APP/Contents/Developer"
-          fi
           xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
 
       - uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
         with:
@@ -61,7 +60,7 @@ jobs:
         run: |
           cd ios
           xcodebuild test -project Wardrobe.xcodeproj -scheme Wardrobe \
-            -destination 'platform=iOS Simulator,name=iPhone 17' \
+            -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.2' \
             -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO -quiet
 
@@ -69,14 +68,14 @@ jobs:
         run: |
           cd ios
           xcodebuild build -project Wardrobe.xcodeproj -scheme Wardrobe \
-            -destination 'platform=iOS Simulator,name=iPad Pro 13-inch (M5)' \
+            -destination 'platform=iOS Simulator,name=iPad Pro 13-inch (M5),OS=27.2' \
             -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO -quiet
 
   testflight:
     needs: test
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 30
     concurrency:
       group: ios-testflight
@@ -112,14 +111,10 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Select Xcode 27
+      - name: Show Xcode and iOS SDK versions
         run: |
-          XCODE_APP=$(find /Applications -maxdepth 1 -name "Xcode_27*.app" 2>/dev/null | sort -V | tail -n 1)
-          if [ -n "$XCODE_APP" ]; then
-            echo "Selecting $XCODE_APP"
-            sudo xcode-select -s "$XCODE_APP/Contents/Developer"
-          fi
           xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
 
       - uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
         with:
@@ -173,6 +168,16 @@ jobs:
             WARDROBE_OIDC_CLIENT_ID="$IOS_OIDC_CLIENT_ID" \
             CODE_SIGNING_ALLOWED=NO \
             -quiet
+
+      - name: Verify archive iOS SDK
+        run: |
+          app_info="$RUNNER_TEMP/Wardrobe.xcarchive/Products/Applications/Wardrobe.app/Info.plist"
+          sdk=$(plutil -extract DTSDKName raw -expect string -o - "$app_info")
+          if [[ ! "$sdk" =~ ^iphoneos([1-9][0-9]*)(\.[0-9]+)*$ ]] || (( BASH_REMATCH[1] < 27 )); then
+            echo "::error::Wardrobe was built with $sdk. TestFlight requires iOS SDK 27 or later."
+            exit 1
+          fi
+          echo "Wardrobe archive SDK is $sdk"
 
       - name: Export and upload to TestFlight
         env:
