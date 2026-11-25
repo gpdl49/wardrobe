@@ -3,7 +3,6 @@
 	"private": true,
 	"type": "module",
 	"description": "Garment masks for photo cutouts: BiRefNet on the native ONNX runtime (docs/wardrobe.md, Photo backgrounds).",
-	"packageManager": "aube@2.9.0",
 	"engines": {
 		"node": ">=24"
 	},
