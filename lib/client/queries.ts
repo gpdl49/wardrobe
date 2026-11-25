@@ -95,6 +95,14 @@ export function useItems(query: ItemsQuery) {
 			),
 		initialPageParam: null as string | null,
 		getNextPageParam: (last) => last.nextCursor,
+		refetchInterval: ({ state }) =>
+			state.data?.pages.some((page) =>
+				page.items.some(
+					(item) => item.coverPhoto?.backgroundStatus === "queued",
+				),
+			)
+				? 3000
+				: false,
 	});
 }
 

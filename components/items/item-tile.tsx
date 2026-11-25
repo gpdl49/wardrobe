@@ -136,19 +136,64 @@ export function ItemRow({ item }: { item: ItemSummaryDto }) {
 	);
 }
 
+export interface ItemSelection {
+	ids: ReadonlySet<string>;
+	disabled: boolean;
+	onToggle: (id: string) => void;
+}
+
+function ItemCheckbox({
+	item,
+	selection,
+	className,
+}: {
+	item: ItemSummaryDto;
+	selection: ItemSelection;
+	className?: string;
+}) {
+	return (
+		<label
+			className={cn(
+				"flex size-11 cursor-pointer items-center justify-center",
+				className,
+			)}
+		>
+			<input
+				type="checkbox"
+				aria-label={`Select ${itemTitle(item)}`}
+				checked={selection.ids.has(item.id)}
+				disabled={selection.disabled}
+				onChange={() => selection.onToggle(item.id)}
+				className="size-5 accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+			/>
+		</label>
+	);
+}
+
 export function ItemGrid({
 	items,
 	view,
+	selection,
 }: {
 	items: ItemSummaryDto[];
 	view: "grid" | "list";
+	selection?: ItemSelection;
 }) {
 	if (view === "list") {
 		return (
 			<ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface">
 				{items.map((item) => (
-					<li key={item.id}>
-						<ItemRow item={item} />
+					<li key={item.id} className={cn(selection && "flex items-center")}>
+						{selection && item.access !== "view" ? (
+							<ItemCheckbox
+								item={item}
+								selection={selection}
+								className="shrink-0"
+							/>
+						) : null}
+						<div className={selection ? "min-w-0 flex-1" : undefined}>
+							<ItemRow item={item} />
+						</div>
 					</li>
 				))}
 			</ul>
@@ -157,8 +202,23 @@ export function ItemGrid({
 	return (
 		<ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 md:grid-cols-4 xl:grid-cols-5">
 			{items.map((item, i) => (
-				<li key={item.id}>
+				<li
+					key={item.id}
+					className={cn(
+						selection && "relative",
+						selection?.ids.has(item.id) &&
+							item.access !== "view" &&
+							"rounded-card ring-2 ring-accent",
+					)}
+				>
 					<ItemCard item={item} priority={i < 8} />
+					{selection && item.access !== "view" ? (
+						<ItemCheckbox
+							item={item}
+							selection={selection}
+							className="absolute top-1 left-1 rounded-lg bg-surface/95 shadow-sm"
+						/>
+					) : null}
 				</li>
 			))}
 		</ul>
