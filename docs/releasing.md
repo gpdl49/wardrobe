@@ -54,14 +54,9 @@ variable `RELEASE_APP_CLIENT_ID` and secret `RELEASE_APP_PRIVATE_KEY`. The
 
 ### Merge settings
 
-This repository currently merges PRs with merge commits. release-please then reads
-every commit on the merged branch; GitHub’s `Merge pull request …` commits are
-ignored, but feature commits must still be Conventional Commits (the hk `commit-msg`
-hook enforces this locally).
-
-**Recommended (as in vidurb/pux):** allow only squash merges and use the PR title as
-the squash commit message (*Settings → General → Pull requests*). The `pr-title`
-workflow is written for that model. We do not change the setting from automation.
+Only squash merges are allowed. A one-commit PR lands with that commit's message and
+any other with the PR title, so the `pr-title` workflow checks both. `main` requires
+the `check` and `conventional` checks.
 
 ### When a release build fails
 

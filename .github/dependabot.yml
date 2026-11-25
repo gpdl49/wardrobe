@@ -3,14 +3,52 @@ version: 2
 # Commit prefixes feed release-please (see release-please-config.json): runtime
 # dependency updates that ship in the container or apps are fixes (patch);
 # dev-only and CI-only updates don't cut a release on their own.
+#
+# package.json must not set packageManager: Dependabot doesn't know aube, and
+# with that field set it skips pnpm-lock.yaml, so every npm PR fails the frozen
+# install. Without it, it uses pnpm, which writes the same lockfile.
+#
+# Cooldowns apply to version updates only; security updates skip them.
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 3
     groups:
-      npm:
+      npm-security:
+        applies-to: security-updates
         patterns: ["*"]
+      # Majors get a PR each, so one breaking change can't hold up the rest.
+      npm:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: [minor, patch]
+    ignore:
+      # Node moves by hand in one change: .node-version, engines, both
+      # Dockerfiles and @types/node.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+    commit-message:
+      prefix: fix
+      prefix-development: chore
+      include: scope
+
+  - package-ecosystem: npm
+    directory: /services/cutout
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    groups:
+      cutout-security:
+        applies-to: security-updates
+        patterns: ["*"]
+      cutout:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: [minor, patch]
     commit-message:
       prefix: fix
       prefix-development: chore
@@ -20,6 +58,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 3
     groups:
       github-actions:
         patterns: ["*"]
@@ -31,6 +71,28 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 3
+    groups:
+      docker:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: fix
+      include: scope
+
+  # Local development only.
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    groups:
+      compose:
+        patterns: ["*"]
+    commit-message:
+      prefix: chore
       include: scope

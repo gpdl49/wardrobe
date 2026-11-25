@@ -28,6 +28,7 @@ concurrency:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       actions: write # start release.yaml on the new tag
       contents: write # tags, releases and the release PR branch

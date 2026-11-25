@@ -154,7 +154,10 @@ describe("CaptureLoop", () => {
 		await queue.whenIdle();
 		// Select the first item, then photograph its label.
 		await user.click(screen.getByRole("button", { name: /^Item 1:/ }));
-		await user.upload(screen.getByTestId("label-input"), shot("label.jpg"));
+		await user.upload(
+			await screen.findByTestId("label-input"),
+			shot("label.jpg"),
+		);
 		await queue.whenIdle();
 
 		const label = backend
@@ -169,7 +172,10 @@ describe("CaptureLoop", () => {
 		const { queue, user } = setup();
 		await user.upload(screen.getByTestId("shutter"), shot());
 		await queue.whenIdle();
-		await user.upload(screen.getByTestId("back-input"), shot("back.jpg"));
+		await user.upload(
+			await screen.findByTestId("back-input"),
+			shot("back.jpg"),
+		);
 		await queue.whenIdle();
 
 		const back = backend
