@@ -4,7 +4,7 @@
 # /tmp and /app/.next/cache are writable (docs/wardrobe.md). Nothing below
 # writes anywhere else at runtime.
 
-FROM node:24-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS base
+FROM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS base
 ARG AUBE_VERSION=2.9.0
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN apk add --no-cache curl \
@@ -41,7 +41,7 @@ COPY --from=deps /app/node_modules ./node_modules
 # The generated client (gitignored) was written in the deps stage's tree.
 RUN aube exec prisma generate && aube run --no-install build
 
-FROM node:24-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS runner
+FROM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS runner
 WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
