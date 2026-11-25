@@ -44,13 +44,13 @@ git push origin v1.0.0
 section in `CHANGELOG.md`. The next push to `main` lets release-please open the
 **chore: release 1.0.1** (or next) PR.
 
-### Optional: CI on release PRs
+### CI on release PRs
 
-A PR opened with `GITHUB_TOKEN` gets no workflow runs. That matters once `main`
-requires checks. Create a GitHub App on your account with *Contents*, *Pull requests*
-and *Issues* set to read and write, install it on this repo, then set repository
-variable `RELEASE_APP_CLIENT_ID` and secret `RELEASE_APP_PRIVATE_KEY`. The
-`release-please` workflow uses that token for the release PR branch.
+A PR opened with `GITHUB_TOKEN` gets no workflow runs, so `release-please` opens the
+release PR as the `gpdl49-release` GitHub App. homestacks (`terraform/github`) sets the
+`RELEASE_APP_CLIENT_ID` variable and `RELEASE_APP_PRIVATE_KEY` secret here, and the App
+is installed on selected repositories only. Without them the workflow falls back to
+`GITHUB_TOKEN`, and the PR's runs need manual approval.
 
 ### Merge settings
 
