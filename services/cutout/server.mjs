@@ -26,6 +26,10 @@ const session = await ort.InferenceSession.create(MODEL, {
 	intraOpNumThreads: THREADS,
 	interOpNumThreads: 1,
 	executionMode: "sequential",
+	// The arena keeps every block it grows to (~9 GiB after one pass, another
+	// ~8 GiB reserved in the next); without it a pass peaks at ~7.7 GiB and
+	// memory returns to ~1.7 GiB between photos.
+	enableCpuMemArena: false,
 });
 const inputName = session.inputNames[0];
 const outputName = session.outputNames.at(-1);
