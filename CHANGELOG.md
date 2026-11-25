@@ -6,6 +6,21 @@ version, following [Semantic Versioning](https://semver.org/). After 1.0.0,
 [Conventional Commit](https://www.conventionalcommits.org/) titles of merged PRs; see
 [docs/releasing.md](docs/releasing.md#releases-maintainers).
 
+## [1.4.0](https://github.com/gpdl49/wardrobe/compare/v1.3.0...v1.4.0) (2026-11-25)
+
+
+### Added
+
+* **catalogue:** run actions on selected items ([dba31c0](https://github.com/gpdl49/wardrobe/commit/dba31c0db2294bf1a59e084bcd68b322f8a02716))
+* **catalogue:** run actions on selected items ([#44](https://github.com/gpdl49/wardrobe/issues/44)) ([29543c9](https://github.com/gpdl49/wardrobe/commit/29543c97e5ea8151c067c23a07cb189cab1ccaaa))
+
+
+### Fixed
+
+* **deps:** bump next from 16.4.4 to 16.4.5 ([#32](https://github.com/gpdl49/wardrobe/issues/32)) ([17a4889](https://github.com/gpdl49/wardrobe/commit/17a48891400e9b0e2b9a271631f684f689a81617))
+* **ios:** build TestFlight archives with the iOS 27 SDK ([fe06edb](https://github.com/gpdl49/wardrobe/commit/fe06edb62574da26174b37d0669d22a2c643b014))
+* **photos:** stop background removal running out of memory ([#30](https://github.com/gpdl49/wardrobe/issues/30)) ([8df5344](https://github.com/gpdl49/wardrobe/commit/8df53446ecf4d367c0fe877376753602f75d67fa))
+
 ## [1.3.0](https://github.com/gpdl49/wardrobe/compare/v1.2.0...v1.3.0) (2026-11-20)
 
 
