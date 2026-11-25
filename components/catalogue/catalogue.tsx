@@ -11,25 +11,34 @@ import {
 import Link from "next/link";
 import { ToggleGroup } from "radix-ui";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { ItemGrid } from "@/components/items/item-tile";
+import { ItemGrid, type ItemSelection } from "@/components/items/item-tile";
 import { WardrobeSwitcher } from "@/components/sharing/wardrobe-switcher";
 import { Button, buttonClass } from "@/components/ui/button";
+import { cn } from "@/components/ui/cn";
 import { Dialog } from "@/components/ui/dialog";
 import {
 	EmptyState,
 	ErrorText,
+	errorMessage,
 	Loading,
 	Spinner,
 } from "@/components/ui/feedback";
 import { Select } from "@/components/ui/field";
 import { SearchBox } from "@/components/ui/search-box";
 import type { ItemSummaryDto } from "@/lib/api/types";
+import type { ItemsQuery } from "@/lib/client/api";
+import {
+	type CatalogueAction,
+	catalogueActions,
+	useCatalogueAction,
+} from "@/lib/client/catalogue-actions";
 import {
 	activeFilterCount,
 	type CatalogueFilters,
 	toItemsQuery,
 } from "@/lib/client/filters";
 import {
+	itemTitle,
 	locationLabel,
 	SEASON_LABELS,
 	STATUS_LABELS,
@@ -41,14 +50,6 @@ import { useCatalogueFilters } from "./use-catalogue-filters";
 export function Catalogue() {
 	const { filters, setFilters, clearFilters } = useCatalogueFilters();
 	const query = useMemo(() => toItemsQuery(filters), [filters]);
-	const items = useItems(query);
-	const all = useMemo(
-		() => items.data?.pages.flatMap((p) => p.items) ?? [],
-		[items.data],
-	);
-	const filtered = activeFilterCount(filters) > 0 || filters.q !== "";
-	// A failed next page keeps the pages already loaded on screen.
-	const nextPageError = items.isFetchNextPageError ? items.error : null;
 
 	return (
 		<div className="flex flex-col gap-4 lg:flex-row lg:gap-8">
@@ -82,54 +83,206 @@ export function Catalogue() {
 					setFilters={setFilters}
 					clearFilters={clearFilters}
 				/>
-				{items.isPending ? (
-					<Loading label="Loading items…" />
-				) : !items.data ? (
-					<ErrorText error={items.error} />
-				) : all.length === 0 ? (
-					filtered ? (
-						<EmptyState
-							icon={<SearchX />}
-							title="No items match"
-							action={
-								<Button onClick={clearFilters}>Clear filters and search</Button>
-							}
-						>
-							Try fewer filters or a different search.
-						</EmptyState>
-					) : filters.owner ? (
-						<EmptyState icon={<Shirt />} title="Nothing to show">
-							Nothing has been shared with you in this wardrobe yet.
-						</EmptyState>
-					) : (
-						<EmptyState
-							icon={<Shirt />}
-							title="Nothing catalogued yet"
-							action={
-								<Link
-									href="/pack"
-									className={buttonClass({ variant: "primary" })}
-								>
-									Start packing
-								</Link>
-							}
-						>
-							Items appear here as you photograph them while packing.
-						</EmptyState>
-					)
-				) : (
-					<>
-						<Results items={all} filters={filters} />
-						<LoadMore
-							hasNextPage={items.hasNextPage}
-							isFetching={items.isFetchingNextPage}
-							onLoad={() => void items.fetchNextPage()}
-							error={nextPageError}
-						/>
-					</>
-				)}
+				<CatalogueResults
+					key={JSON.stringify(query)}
+					query={query}
+					filters={filters}
+					clearFilters={clearFilters}
+				/>
 			</div>
 		</div>
+	);
+}
+
+function CatalogueResults({
+	query,
+	filters,
+	clearFilters,
+}: {
+	query: ItemsQuery;
+	filters: CatalogueFilters;
+	clearFilters: () => void;
+}) {
+	const items = useItems(query);
+	const all = useMemo(
+		() => items.data?.pages.flatMap((p) => p.items) ?? [],
+		[items.data],
+	);
+	const filtered = activeFilterCount(filters) > 0 || filters.q !== "";
+	// A failed next page keeps the pages already loaded on screen.
+	const nextPageError = items.isFetchNextPageError ? items.error : null;
+
+	const [selecting, setSelecting] = useState(false);
+	const [selected, setSelected] = useState<Set<string>>(new Set());
+	const [action, setAction] = useState<CatalogueAction | "">("");
+	const actionId = useId();
+	const bulk = useCatalogueAction();
+	const editable = all.filter((item) => item.access !== "view");
+	const ids = editable
+		.filter((item) => selected.has(item.id))
+		.map((item) => item.id);
+	const selection: ItemSelection | undefined = selecting
+		? {
+				ids: selected,
+				disabled: bulk.isPending,
+				onToggle(id) {
+					setSelected((current) => {
+						const next = new Set(current);
+						if (next.has(id)) next.delete(id);
+						else next.add(id);
+						return next;
+					});
+				},
+			}
+		: undefined;
+	const result = bulk.data;
+	const failure = result?.failed[0];
+	const failedItem = failure && all.find((item) => item.id === failure.id);
+
+	return (
+		<>
+			{editable.length > 0 || selecting ? (
+				<div
+					className={cn(
+						"flex flex-wrap items-center gap-2",
+						selecting &&
+							"sticky top-14 z-[6] rounded-card border border-line bg-surface p-3 shadow-xs",
+					)}
+				>
+					<Button
+						onClick={() => {
+							setSelecting(!selecting);
+							setSelected(new Set());
+							setAction("");
+							bulk.reset();
+						}}
+						disabled={bulk.isPending}
+					>
+						{selecting ? "Done" : "Select items"}
+					</Button>
+					{selecting ? (
+						<>
+							<span role="status" className="text-sm text-muted">
+								{ids.length} selected
+							</span>
+							<Button
+								variant="ghost"
+								disabled={bulk.isPending || editable.length === 0}
+								onClick={() =>
+									setSelected(
+										ids.length === editable.length
+											? new Set()
+											: new Set(editable.map((item) => item.id)),
+									)
+								}
+							>
+								{ids.length > 0 && ids.length === editable.length
+									? "Clear selection"
+									: "Select all loaded"}
+							</Button>
+							<label htmlFor={actionId} className="sr-only">
+								Action
+							</label>
+							<Select
+								id={actionId}
+								value={action}
+								disabled={bulk.isPending}
+								className="w-auto max-w-full flex-1 sm:flex-none"
+								onChange={(e) => {
+									setAction(e.target.value as CatalogueAction | "");
+									bulk.reset();
+								}}
+							>
+								<option value="">Choose an action…</option>
+								{Object.entries(catalogueActions).map(([value, label]) => (
+									<option key={value} value={value}>
+										{label}
+									</option>
+								))}
+							</Select>
+							<Button
+								variant="primary"
+								disabled={!action || ids.length === 0 || bulk.isPending}
+								onClick={() => {
+									if (action && ids.length > 0) bulk.mutate({ action, ids });
+								}}
+							>
+								{bulk.isPending ? "Running…" : "Run action"}
+							</Button>
+							{action === "suggestions" ? (
+								<p className="basis-full text-sm text-muted">
+									Adds suggested tags and replaces item colours with the latest
+									available suggestion.
+								</p>
+							) : null}
+							{result ? (
+								<p role="status" className="basis-full text-sm">
+									{result.processed}{" "}
+									{result.action === "suggestions" ? "updated" : "queued"} ·{" "}
+									{result.skipped} skipped · {result.failed.length} failed
+								</p>
+							) : null}
+							{failure ? (
+								<ErrorText
+									className="basis-full"
+									error={
+										failedItem
+											? `${itemTitle(failedItem)} – ${errorMessage(failure.error)}`
+											: failure.error
+									}
+								/>
+							) : null}
+						</>
+					) : null}
+				</div>
+			) : null}
+			{items.isPending ? (
+				<Loading label="Loading items…" />
+			) : !items.data ? (
+				<ErrorText error={items.error} />
+			) : all.length === 0 ? (
+				filtered ? (
+					<EmptyState
+						icon={<SearchX />}
+						title="No items match"
+						action={
+							<Button onClick={clearFilters}>Clear filters and search</Button>
+						}
+					>
+						Try fewer filters or a different search.
+					</EmptyState>
+				) : filters.owner ? (
+					<EmptyState icon={<Shirt />} title="Nothing to show">
+						Nothing has been shared with you in this wardrobe yet.
+					</EmptyState>
+				) : (
+					<EmptyState
+						icon={<Shirt />}
+						title="Nothing catalogued yet"
+						action={
+							<Link
+								href="/pack"
+								className={buttonClass({ variant: "primary" })}
+							>
+								Start packing
+							</Link>
+						}
+					>
+						Items appear here as you photograph them while packing.
+					</EmptyState>
+				)
+			) : (
+				<>
+					<Results items={all} filters={filters} selection={selection} />
+					<LoadMore
+						hasNextPage={items.hasNextPage}
+						isFetching={items.isFetchingNextPage}
+						onLoad={() => void items.fetchNextPage()}
+						error={nextPageError}
+					/>
+				</>
+			)}
+		</>
 	);
 }
 
@@ -285,22 +438,29 @@ function ActiveFilters({
 function Results({
 	items,
 	filters,
+	selection,
 }: {
 	items: ItemSummaryDto[];
 	filters: CatalogueFilters;
+	selection?: ItemSelection;
 }) {
 	const groups = useMemo(
 		() => groupItems(items, filters.group),
 		[items, filters.group],
 	);
 	if (!groups) {
-		return <ItemGrid items={items} view={filters.view} />;
+		return <ItemGrid items={items} view={filters.view} selection={selection} />;
 	}
 	return (
 		<div className="flex flex-col gap-6">
 			{groups.map((group) => (
 				<section key={group.key} aria-label={group.label}>
-					<h2 className="sticky top-14 z-[5] -mx-4 mb-2 flex items-baseline gap-2 bg-canvas/90 px-4 py-2 font-semibold backdrop-blur">
+					<h2
+						className={cn(
+							"-mx-4 mb-2 flex items-baseline gap-2 bg-canvas/90 px-4 py-2 font-semibold backdrop-blur",
+							!selection && "sticky top-14 z-[5]",
+						)}
+					>
 						{group.href ? (
 							<Link href={group.href} className="hover:underline">
 								{group.label}
@@ -312,7 +472,11 @@ function Results({
 							{group.items.length}
 						</span>
 					</h2>
-					<ItemGrid items={group.items} view={filters.view} />
+					<ItemGrid
+						items={group.items}
+						view={filters.view}
+						selection={selection}
+					/>
 				</section>
 			))}
 		</div>
