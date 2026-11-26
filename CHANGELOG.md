@@ -11,7 +11,6 @@ version, following [Semantic Versioning](https://semver.org/). After 1.0.0,
 
 ### Added
 
-* **catalogue:** run actions on selected items ([dba31c0](https://github.com/gpdl49/wardrobe/commit/dba31c0db2294bf1a59e084bcd68b322f8a02716))
 * **catalogue:** run actions on selected items ([#44](https://github.com/gpdl49/wardrobe/issues/44)) ([29543c9](https://github.com/gpdl49/wardrobe/commit/29543c97e5ea8151c067c23a07cb189cab1ccaaa))
 
 
